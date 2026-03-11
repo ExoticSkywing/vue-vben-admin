@@ -57,3 +57,6 @@ vite.config.ts.*
 .claude
 .codex
 skills-lock.json
+api_gateway/venv/
+api_gateway/__pycache__/
+__pycache__/

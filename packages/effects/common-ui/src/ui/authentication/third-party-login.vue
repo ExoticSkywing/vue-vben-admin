@@ -1,11 +1,5 @@
 <script setup lang="ts">
 import { useAppConfig } from '@vben/hooks';
-import {
-  SvgGithubIcon,
-  SvgGoogleIcon,
-  SvgQQChatIcon,
-  SvgWeChatIcon,
-} from '@vben/icons';
 import { $t } from '@vben/locales';
 
 import { VbenIconButton } from '@vben-core/shadcn-ui';
@@ -19,6 +13,10 @@ defineOptions({
 const {
   auth: { dingding: dingdingAuthConfig },
 } = useAppConfig(import.meta.env, import.meta.env.PROD);
+
+function handleWpLogin() {
+  window.location.href = '/api/auth/wp-login';
+}
 </script>
 
 <template>
@@ -33,32 +31,12 @@ const {
 
     <div class="mt-4 flex flex-wrap justify-center">
       <VbenIconButton
-        :tooltip="$t('authentication.wechatLogin')"
+        tooltip="使用星小芽账号授权登录"
         tooltip-side="top"
         class="mb-3"
+        @click="handleWpLogin"
       >
-        <SvgWeChatIcon />
-      </VbenIconButton>
-      <VbenIconButton
-        :tooltip="$t('authentication.qqLogin')"
-        tooltip-side="top"
-        class="mb-3"
-      >
-        <SvgQQChatIcon />
-      </VbenIconButton>
-      <VbenIconButton
-        :tooltip="$t('authentication.githubLogin')"
-        tooltip-side="top"
-        class="mb-3"
-      >
-        <SvgGithubIcon />
-      </VbenIconButton>
-      <VbenIconButton
-        :tooltip="$t('authentication.googleLogin')"
-        tooltip-side="top"
-        class="mb-3"
-      >
-        <SvgGoogleIcon />
+        <img src="/xingxy_logo.png" alt="星小芽" class="h-5 w-5" />
       </VbenIconButton>
       <DingdingLogin
         v-if="dingdingAuthConfig"

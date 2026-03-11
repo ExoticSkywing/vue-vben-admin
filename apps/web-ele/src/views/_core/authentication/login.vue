@@ -15,17 +15,9 @@ const authStore = useAuthStore();
 
 const MOCK_USER_OPTIONS: BasicOption[] = [
   {
-    label: 'Super',
-    value: 'vben',
-  },
-  {
-    label: 'Admin',
+    label: '管控中心超管',
     value: 'admin',
-  },
-  {
-    label: 'User',
-    value: 'jack',
-  },
+  }
 ];
 
 const formSchema = computed((): VbenFormSchema[] => {
@@ -57,8 +49,8 @@ const formSchema = computed((): VbenFormSchema[] => {
             );
             if (findUser) {
               form.setValues({
-                password: '123456',
-                username: findUser.value,
+                password: '',
+                username: values.selectAccount,
               });
             }
           }
@@ -78,13 +70,13 @@ const formSchema = computed((): VbenFormSchema[] => {
       label: $t('authentication.password'),
       rules: z.string().min(1, { message: $t('authentication.passwordTip') }),
     },
-    {
-      component: markRaw(SliderCaptcha),
-      fieldName: 'captcha',
-      rules: z.boolean().refine((value) => value, {
-        message: $t('authentication.verifyRequiredTip'),
-      }),
-    },
+    // {
+    //   component: markRaw(SliderCaptcha),
+    //   fieldName: 'captcha',
+    //   rules: z.boolean().refine((value) => value, {
+    //     message: $t('authentication.verifyRequiredTip'),
+    //   }),
+    // },
   ];
 });
 </script>

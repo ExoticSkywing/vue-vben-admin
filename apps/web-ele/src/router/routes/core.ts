@@ -90,6 +90,15 @@ const coreRoutes: RouteRecordRaw[] = [
           title: $t('page.auth.register'),
         },
       },
+      {
+        name: 'OAuthCallback',
+        path: 'oauth-callback',
+        component: () =>
+          import('#/views/_core/authentication/oauth-callback.vue'),
+        meta: {
+          title: 'OAuth 授权回调',
+        },
+      },
     ],
   },
 ];
