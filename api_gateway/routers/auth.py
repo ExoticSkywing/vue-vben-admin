@@ -23,7 +23,7 @@ router_user = APIRouter()
 
 # ──────────────────── 内存 Session 存储（生产阶段可替换为 Redis） ────────────────────
 # 用于存储 OAuth state 和用户信息的简易字典
-_oauth_states: dict = {}       # state -> True（防 CSRF）
+_oauth_states: dict = {}       # state -> {"redirect": str|None}（防 CSRF + 保留跳转目标）
 _user_sessions: dict = {}      # jwt_sub -> user_info dict
 
 
@@ -32,14 +32,15 @@ _user_sessions: dict = {}      # jwt_sub -> user_info dict
 # ═══════════════════════════════════════════════════════════════
 
 @router_auth.get("/wp-login")
-async def wp_login():
+async def wp_login(redirect: str = Query(None, description="OAuth 完成后跳转的前端路径")):
     """
     步骤 1：组装星小芽 OAuth 授权页面 URL，302 跳转用户浏览器。
     用户会在星小芽主站看到授权确认页面。
+    支持 redirect 参数，OAuth 完成后会带回前端目标页。
     """
     # 生成防 CSRF 的 state 随机串
     state = secrets.token_urlsafe(32)
-    _oauth_states[state] = True
+    _oauth_states[state] = {"redirect": redirect}
 
     # 按照 Zibll OAuth 开发文档拼装 authorize 请求参数
     params = {
@@ -64,7 +65,8 @@ async def wp_callback(code: str = Query(None), state: str = Query(None)):
     # ── 2.1 校验 state 防止 CSRF ──
     if not state or state not in _oauth_states:
         raise HTTPException(status_code=400, detail="无效的 state 参数，可能是 CSRF 攻击")
-    del _oauth_states[state]
+    state_data = _oauth_states.pop(state)
+    oauth_redirect = state_data.get("redirect") if isinstance(state_data, dict) else None
 
     if not code:
         raise HTTPException(status_code=400, detail="缺少授权码 code")
@@ -114,10 +116,29 @@ async def wp_callback(code: str = Query(None), state: str = Query(None)):
     avatar = userinfo.get("avatar", "")
     email = userinfo.get("email", "")
 
+    # ── 2.3b 获取 unionid (WP user ID)，用于跨应用身份桥接 ──
+    wp_uid = None
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            unionid_resp = await client.get(
+                f"{settings.WP_OAUTH_BASE}/unionid",
+                headers={"Authorization": f"Bearer {wp_access_token}"},
+            )
+        if unionid_resp.status_code == 200:
+            wp_uid = unionid_resp.json().get("unionid")
+    except Exception:
+        pass  # unionid 获取失败不阻塞登录
+
+    import logging
+    logging.getLogger(__name__).info(
+        f"[oauth] openid={openid!r}, name={name!r}, wp_uid={wp_uid!r}"
+    )
+
     # ── 2.4 签发本系统的 JWT ──
-    # sub 使用 openid 作为唯一标识
+    # sub 使用 openid 作为唯一标识，wp_uid 用于跨应用身份桥接
     jwt_sub = f"wp_{openid}" if openid else f"wp_{name}"
-    local_token = create_access_token(subject=jwt_sub)
+    extra = {"wp_uid": int(wp_uid)} if wp_uid else {}
+    local_token = create_access_token(subject=jwt_sub, extra_claims=extra)
 
     # 将用户信息存储到内存会话（后续 /user/info 会使用）
     _user_sessions[jwt_sub] = {
@@ -133,7 +154,8 @@ async def wp_callback(code: str = Query(None), state: str = Query(None)):
     # ── 2.5 重定向到前端，URL 中携带 accessToken ──
     # 根据前端路由模式选择 URL 格式：hash mode 需要 /#/ 前缀，history mode 不需要
     hash_prefix = "/#" if settings.frontend_hash_mode else ""
-    redirect_url = f"{settings.FRONTEND_URL}{hash_prefix}/auth/oauth-callback?accessToken={local_token}"
+    redirect_param = f"&redirect={oauth_redirect}" if oauth_redirect else ""
+    redirect_url = f"{settings.FRONTEND_URL}{hash_prefix}/auth/oauth-callback?accessToken={local_token}{redirect_param}"
     return RedirectResponse(url=redirect_url)
 
 

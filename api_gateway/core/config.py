@@ -37,4 +37,35 @@ class Settings(BaseSettings):
     # 授权 scope
     WP_OAUTH_SCOPE: str = "basic email profile"
 
+    # ─── 小芽空投机 MySQL (xiaoyaairdrop) ───
+    AIRDROP_DB_HOST: str = os.getenv("AIRDROP_DB_HOST", "localhost")
+    AIRDROP_DB_PORT: int = int(os.getenv("AIRDROP_DB_PORT", "3306"))
+    AIRDROP_DB_USER: str = os.getenv("AIRDROP_DB_USER", "xiaoyaairdrop")
+    AIRDROP_DB_PASSWORD: str = os.getenv("AIRDROP_DB_PASSWORD", "L3Ht7WJJmdAjDF6h")
+    AIRDROP_DB_NAME: str = os.getenv("AIRDROP_DB_NAME", "xiaoyaairdrop")
+
+    # ─── 小芽精灵 MySQL (tgbot_verify) — 只读，用于身份映射 ───
+    VERIFY_DB_HOST: str = os.getenv("VERIFY_DB_HOST", "localhost")
+    VERIFY_DB_PORT: int = int(os.getenv("VERIFY_DB_PORT", "3306"))
+    VERIFY_DB_USER: str = os.getenv("VERIFY_DB_USER", "xiaoyajl_bot")
+    VERIFY_DB_PASSWORD: str = os.getenv("VERIFY_DB_PASSWORD", "850163096")
+    VERIFY_DB_NAME: str = os.getenv("VERIFY_DB_NAME", "xiaoyajl_bot")
+
+    # ─── 星小芽 WordPress 数据库（只读，用于跨应用 openid 桥接） ───
+    WP_DB_HOST: str = os.getenv("WP_DB_HOST", "localhost")
+    WP_DB_PORT: int = int(os.getenv("WP_DB_PORT", "3306"))
+    WP_DB_USER: str = os.getenv("WP_DB_USER", "xingxy_manyuzo")
+    WP_DB_PASSWORD: str = os.getenv("WP_DB_PASSWORD", "xingxymanyuzo_8501")
+    WP_DB_NAME: str = os.getenv("WP_DB_NAME", "xingxy_manyuzo")
+    WP_TABLE_PREFIX: str = os.getenv("WP_TABLE_PREFIX", "wp_")
+
+    # 小芽精灵 OAuth appid（用于查找用户在精灵侧的 openid）
+    VERIFY_OAUTH_APPID: str = os.getenv("VERIFY_OAUTH_APPID", "zo_ww0qctfpokxa1g")
+
+    # ─── TG Bot 配置（用于动态获取 Bot username 和生成分享链接） ───
+    AIRDROP_BOT_TOKEN: str = os.getenv("AIRDROP_BOT_TOKEN", "8714950601:AAHJyeekNJ5EovgA7SEjm4XIbFf3iU3W2kU")
+
+    # 超级管理员 TG user ID（可查看所有空投包）
+    SUPER_ADMIN_TG_ID: int = int(os.getenv("SUPER_ADMIN_TG_ID", "1861667385"))
+
 settings = Settings()

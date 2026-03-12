@@ -58,8 +58,12 @@ onMounted(async () => {
       type: 'success',
     });
 
-    // 跳转到首页
-    await router.replace(userInfo?.homePath || preferences.app.defaultHomePath);
+    // 跳转到目标页：优先使用 redirect 参数，否则跳首页
+    const redirectPath = (route.query.redirect as string)
+      || userInfo?.homePath
+      || preferences.app.defaultHomePath;
+
+    await router.replace(decodeURIComponent(redirectPath));
   } catch (error: any) {
     statusText.value = `授权处理异常：${error?.message || '未知错误'}`;
     hasError.value = true;

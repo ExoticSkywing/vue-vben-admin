@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import auth
+from routers import auth, airdrop
 import uvicorn
 
 app = FastAPI(
@@ -32,6 +32,7 @@ async def health_check():
 
 app.include_router(auth.router_auth, prefix="/api/auth", tags=["Authentication"])
 app.include_router(auth.router_user, prefix="/api/user", tags=["User Info"])
+app.include_router(airdrop.router, prefix="/api/airdrop", tags=["Airdrop Management"])
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8555, reload=True)
