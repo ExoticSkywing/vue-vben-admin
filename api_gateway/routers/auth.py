@@ -6,25 +6,57 @@
 3. /api/auth/login         — Vben 标准账密登录（开发期兼容保留）
 4. /api/auth/codes         — Vben 菜单权限码
 5. /api/auth/logout        — 登出
-6. /api/user/info          — 当前登录用户信息
+6. /api/user/info          — 当前登录用户信息（从 JWT 解析，无状态）
 """
 
+import logging
 import secrets
 import httpx
+import pymysql
 from urllib.parse import urlencode
+from cachetools import TTLCache
 
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import RedirectResponse
 from core.config import settings
-from core.security import create_access_token
+from core.security import create_access_token, verify_token
+
+logger = logging.getLogger(__name__)
 
 router_auth = APIRouter()
 router_user = APIRouter()
 
-# ──────────────────── 内存 Session 存储（生产阶段可替换为 Redis） ────────────────────
-# 用于存储 OAuth state 和用户信息的简易字典
-_oauth_states: dict = {}       # state -> {"redirect": str|None}（防 CSRF + 保留跳转目标）
-_user_sessions: dict = {}      # jwt_sub -> user_info dict
+# ──────────────────── 无状态化 ────────────────────
+# state 防 CSRF：TTLCache 自动 10 分钟过期，最多 1000 条
+_oauth_states: TTLCache = TTLCache(maxsize=1000, ttl=600)
+
+
+def _resolve_tg_uid_from_wp(wp_uid: int) -> Optional[int]:
+    """登录时一次性从 WP usermeta 查 _xingxy_telegram_uid"""
+    if not wp_uid:
+        return None
+    try:
+        conn = pymysql.connect(
+            host=settings.WP_DB_HOST, port=settings.WP_DB_PORT,
+            user=settings.WP_DB_USER, password=settings.WP_DB_PASSWORD,
+            database=settings.WP_DB_NAME, charset="utf8mb4", autocommit=True,
+            cursorclass=pymysql.cursors.DictCursor,
+        )
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"SELECT meta_value FROM {settings.WP_TABLE_PREFIX}usermeta "
+                    "WHERE user_id = %s AND meta_key = '_xingxy_telegram_uid' LIMIT 1",
+                    (wp_uid,),
+                )
+                row = cur.fetchone()
+                return int(row["meta_value"]) if row else None
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning(f"[auth] 查询 WP usermeta _xingxy_telegram_uid 失败: {e}")
+        return None
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -95,12 +127,23 @@ async def wp_callback(code: str = Query(None), state: str = Query(None)):
     if not wp_access_token:
         raise HTTPException(status_code=502, detail="星小芽未返回 access_token")
 
-    # ── 2.3 用 access_token 获取用户信息 ──
+    # ── 2.3 用 access_token 获取用户信息 + unionid（单次连接） ──
     async with httpx.AsyncClient(timeout=10.0) as client:
         user_resp = await client.get(
             settings.WP_OAUTH_USERINFO_URL,
             headers={"Authorization": f"Bearer {wp_access_token}"},
         )
+        # 同时获取 unionid (WP user ID)
+        wp_uid = None
+        try:
+            unionid_resp = await client.get(
+                f"{settings.WP_OAUTH_BASE}/unionid",
+                headers={"Authorization": f"Bearer {wp_access_token}"},
+            )
+            if unionid_resp.status_code == 200:
+                wp_uid = unionid_resp.json().get("unionid")
+        except Exception:
+            pass  # unionid 获取失败不阻塞登录
 
     if user_resp.status_code != 200:
         raise HTTPException(
@@ -114,44 +157,31 @@ async def wp_callback(code: str = Query(None), state: str = Query(None)):
     openid = userinfo.get("openid", "")
     name = userinfo.get("name", "星小芽用户")
     avatar = userinfo.get("avatar", "")
-    email = userinfo.get("email", "")
 
-    # ── 2.3b 获取 unionid (WP user ID)，用于跨应用身份桥接 ──
-    wp_uid = None
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            unionid_resp = await client.get(
-                f"{settings.WP_OAUTH_BASE}/unionid",
-                headers={"Authorization": f"Bearer {wp_access_token}"},
-            )
-        if unionid_resp.status_code == 200:
-            wp_uid = unionid_resp.json().get("unionid")
-    except Exception:
-        pass  # unionid 获取失败不阻塞登录
+    # ── 2.4 从 WP usermeta 解析 tg_uid（一次性桥接） ──
+    tg_uid = None
+    if wp_uid:
+        tg_uid = _resolve_tg_uid_from_wp(int(wp_uid))
 
-    import logging
-    logging.getLogger(__name__).info(
-        f"[oauth] openid={openid!r}, name={name!r}, wp_uid={wp_uid!r}"
+    is_super = tg_uid == settings.SUPER_ADMIN_TG_ID if tg_uid else False
+
+    logger.info(
+        f"[oauth] openid={openid!r}, name={name!r}, wp_uid={wp_uid!r}, "
+        f"tg_uid={tg_uid!r}, is_super={is_super}"
     )
 
-    # ── 2.4 签发本系统的 JWT ──
-    # sub 使用 openid 作为唯一标识，wp_uid 用于跨应用身份桥接
+    # ── 2.5 签发自包含 JWT（无需服务端 session） ──
     jwt_sub = f"wp_{openid}" if openid else f"wp_{name}"
-    extra = {"wp_uid": int(wp_uid)} if wp_uid else {}
+    extra = {
+        "wp_uid": int(wp_uid) if wp_uid else None,
+        "tg_uid": tg_uid,
+        "is_super": is_super,
+        "name": name,
+        "avatar": avatar,
+    }
     local_token = create_access_token(subject=jwt_sub, extra_claims=extra)
 
-    # 将用户信息存储到内存会话（后续 /user/info 会使用）
-    _user_sessions[jwt_sub] = {
-        "userId": openid,
-        "username": name,
-        "realName": name,
-        "avatar": avatar,
-        "email": email,
-        "desc": "星小芽授权用户",
-        "roles": [{"roleName": "Super Admin", "value": "super"}],
-    }
-
-    # ── 2.5 重定向到前端，URL 中携带 accessToken ──
+    # ── 2.6 重定向到前端，URL 中携带 accessToken ──
     # 根据前端路由模式选择 URL 格式：hash mode 需要 /#/ 前缀，history mode 不需要
     hash_prefix = "/#" if settings.frontend_hash_mode else ""
     redirect_param = f"&redirect={oauth_redirect}" if oauth_redirect else ""
@@ -197,24 +227,32 @@ async def get_codes():
 async def get_userinfo(request: Request):
     """
     获取当前登录用户的信息。
-    先尝试从 JWT 中解析 sub，在会话中查找 OAuth 用户信息；
-    如果找不到则返回默认管理员信息（向下兼容开发期硬编码登录）。
+    完全从 JWT 解析，无需服务端 session，Gateway 重启不影响。
     """
-    from core.security import verify_token
-
     # 从 Authorization header 中提取 token
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.replace("Bearer ", "").strip() if auth_header else ""
 
-    user_info = None
     if token:
         payload = verify_token(token)
         if payload:
             sub = payload.get("sub", "")
-            user_info = _user_sessions.get(sub)
-
-    if user_info:
-        return {"code": 0, "data": user_info, "message": "ok"}
+            name = payload.get("name", "")
+            avatar = payload.get("avatar", "")
+            # JWT 自包含用户信息 → 直接返回
+            if name:
+                return {
+                    "code": 0,
+                    "data": {
+                        "userId": sub,
+                        "username": name,
+                        "realName": name,
+                        "avatar": avatar,
+                        "desc": "星小芽授权用户",
+                        "roles": [{"roleName": "Super Admin", "value": "super"}],
+                    },
+                    "message": "ok",
+                }
 
     # 兜底：返回默认管理员（兼容开发期 admin 账号登录）
     return {

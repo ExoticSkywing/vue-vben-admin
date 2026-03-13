@@ -2,6 +2,9 @@
 空投机管理路由模块
 提供资源包的检索、元数据编辑、口令管理、分享链接生成等 API。
 核心聚焦：海量空投包中立即检索到目标 URL 并复制走人。
+
+身份解析：完全从 JWT 取 tg_uid，零 DB 查询。
+tg_uid 在 OAuth 登录时由 auth.py 一次性从 WP usermeta(_xingxy_telegram_uid) 解析。
 """
 
 import base64
@@ -64,88 +67,13 @@ def _get_airdrop_conn():
     )
 
 
-def _get_verify_conn():
-    """获取精灵 MySQL 连接（只读，身份映射用）"""
-    return pymysql.connect(
-        host=settings.VERIFY_DB_HOST,
-        port=settings.VERIFY_DB_PORT,
-        user=settings.VERIFY_DB_USER,
-        password=settings.VERIFY_DB_PASSWORD,
-        database=settings.VERIFY_DB_NAME,
-        charset="utf8mb4",
-        autocommit=True,
-        cursorclass=pymysql.cursors.DictCursor,
-    )
-
-
-def _get_wp_conn():
-    """获取 WordPress MySQL 连接（只读，跨应用 openid 桥接用）"""
-    return pymysql.connect(
-        host=settings.WP_DB_HOST,
-        port=settings.WP_DB_PORT,
-        user=settings.WP_DB_USER,
-        password=settings.WP_DB_PASSWORD,
-        database=settings.WP_DB_NAME,
-        charset="utf8mb4",
-        autocommit=True,
-        cursorclass=pymysql.cursors.DictCursor,
-    )
-
-
-# ─── 身份解析 ───
-
-import hashlib
-
-def _get_verify_openid_for_wp_user(wp_user_id: int) -> Optional[str]:
-    """
-    通过 WP user ID 查找用户在小芽精灵侧的 openid。
-    Zibll OAuth 的 openid 是 per-appid 的，存储在 wp_usermeta 中，
-    meta_key = 'zibll_oauth_openid_' + md5(appid)。
-    """
-    if not wp_user_id:
-        return None
-    meta_key = 'zibll_oauth_openid_' + hashlib.md5(
-        settings.VERIFY_OAUTH_APPID.encode()
-    ).hexdigest()
-    conn = _get_wp_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                f"SELECT meta_value FROM {settings.WP_TABLE_PREFIX}usermeta "
-                "WHERE user_id = %s AND meta_key = %s LIMIT 1",
-                (wp_user_id, meta_key)
-            )
-            row = cur.fetchone()
-            return row["meta_value"] if row else None
-    finally:
-        conn.close()
-
-
-def _resolve_tg_user_id(wp_openid: str) -> Optional[int]:
-    """从精灵 DB 查 wp_openid → tg_user_id"""
-    if not wp_openid:
-        return None
-    conn = _get_verify_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT user_id FROM users WHERE wp_openid = %s LIMIT 1",
-                (wp_openid,)
-            )
-            row = cur.fetchone()
-            return row["user_id"] if row else None
-    finally:
-        conn.close()
-
+# ─── 身份解析（纯 JWT，零 DB 查询） ───
 
 def _get_current_user(request: Request) -> dict:
     """
-    从请求中解析当前用户身份。
+    从 JWT 中直接解析用户身份，零 DB 查询。
+    JWT 在登录时已包含 tg_uid / is_super / name 等全部信息。
     返回 {"wp_openid": str, "tg_user_id": int|None, "is_super": bool}
-    身份桥接逻辑：
-    1. 从 JWT 取 wp_uid (WP user ID / unionid)
-    2. 查 WP usermeta 找到用户在小芽精灵侧的 openid
-    3. 用该 openid 查 tgbot_verify 得到 tg_user_id
     """
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.replace("Bearer ", "").strip() if auth_header else ""
@@ -159,23 +87,10 @@ def _get_current_user(request: Request) -> dict:
 
     sub = payload.get("sub", "")
     wp_openid = sub.replace("wp_", "", 1) if sub.startswith("wp_") else None
-    wp_uid = payload.get("wp_uid")  # WP user ID (unionid), 新 JWT 才有
+    tg_user_id = payload.get("tg_uid")  # 登录时已从 WP usermeta 解析
+    is_super = payload.get("is_super", False)
 
-    tg_user_id = None
-
-    # 优先用 wp_uid 桥接（跨应用 openid 转换）
-    if wp_uid:
-        verify_openid = _get_verify_openid_for_wp_user(wp_uid)
-        if verify_openid:
-            tg_user_id = _resolve_tg_user_id(verify_openid)
-
-    # 回退：直接用 Center 的 openid 尝试匹配（兼容旧 token）
-    if tg_user_id is None and wp_openid:
-        tg_user_id = _resolve_tg_user_id(wp_openid)
-
-    is_super = tg_user_id == settings.SUPER_ADMIN_TG_ID if tg_user_id else False
-
-    logger.info(f"[identity] sub={sub!r}, wp_uid={wp_uid!r}, tg_user_id={tg_user_id!r}, is_super={is_super}")
+    logger.info(f"[identity] sub={sub!r}, tg_uid={tg_user_id!r}, is_super={is_super}")
 
     return {
         "wp_openid": wp_openid,
