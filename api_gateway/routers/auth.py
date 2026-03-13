@@ -12,11 +12,9 @@
 import logging
 import secrets
 import httpx
-import pymysql
 from urllib.parse import urlencode
 from cachetools import TTLCache
 
-from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import RedirectResponse
 from core.config import settings
@@ -30,33 +28,6 @@ router_user = APIRouter()
 # ──────────────────── 无状态化 ────────────────────
 # state 防 CSRF：TTLCache 自动 10 分钟过期，最多 1000 条
 _oauth_states: TTLCache = TTLCache(maxsize=1000, ttl=600)
-
-
-def _resolve_tg_uid_from_wp(wp_uid: int) -> Optional[int]:
-    """登录时一次性从 WP usermeta 查 _xingxy_telegram_uid"""
-    if not wp_uid:
-        return None
-    try:
-        conn = pymysql.connect(
-            host=settings.WP_DB_HOST, port=settings.WP_DB_PORT,
-            user=settings.WP_DB_USER, password=settings.WP_DB_PASSWORD,
-            database=settings.WP_DB_NAME, charset="utf8mb4", autocommit=True,
-            cursorclass=pymysql.cursors.DictCursor,
-        )
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    f"SELECT meta_value FROM {settings.WP_TABLE_PREFIX}usermeta "
-                    "WHERE user_id = %s AND meta_key = '_xingxy_telegram_uid' LIMIT 1",
-                    (wp_uid,),
-                )
-                row = cur.fetchone()
-                return int(row["meta_value"]) if row else None
-        finally:
-            conn.close()
-    except Exception as e:
-        logger.warning(f"[auth] 查询 WP usermeta _xingxy_telegram_uid 失败: {e}")
-        return None
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -127,7 +98,7 @@ async def wp_callback(code: str = Query(None), state: str = Query(None)):
     if not wp_access_token:
         raise HTTPException(status_code=502, detail="星小芽未返回 access_token")
 
-    # ── 2.3 用 access_token 获取用户信息 + unionid（单次连接） ──
+    # ── 2.3 用 access_token 获取用户信息 + unionid ──
     async with httpx.AsyncClient(timeout=10.0) as client:
         user_resp = await client.get(
             settings.WP_OAUTH_USERINFO_URL,
@@ -158,10 +129,8 @@ async def wp_callback(code: str = Query(None), state: str = Query(None)):
     name = userinfo.get("name", "星小芽用户")
     avatar = userinfo.get("avatar", "")
 
-    # ── 2.4 从 WP usermeta 解析 tg_uid（一次性桥接） ──
-    tg_uid = None
-    if wp_uid:
-        tg_uid = _resolve_tg_uid_from_wp(int(wp_uid))
+    # ── 2.4 tg_uid 直接从 /userinfo 响应取（zibll-oauth 已扩展返回） ──
+    tg_uid = userinfo.get("tg_uid")
 
     is_super = tg_uid == settings.SUPER_ADMIN_TG_ID if tg_uid else False
 

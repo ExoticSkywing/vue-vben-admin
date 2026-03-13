@@ -44,14 +44,6 @@ class Settings(BaseSettings):
     AIRDROP_DB_PASSWORD: str = os.getenv("AIRDROP_DB_PASSWORD", "L3Ht7WJJmdAjDF6h")
     AIRDROP_DB_NAME: str = os.getenv("AIRDROP_DB_NAME", "xiaoyaairdrop")
 
-    # ─── 星小芽 WordPress 数据库（只读，登录时查 _xingxy_telegram_uid） ───
-    WP_DB_HOST: str = os.getenv("WP_DB_HOST", "localhost")
-    WP_DB_PORT: int = int(os.getenv("WP_DB_PORT", "3306"))
-    WP_DB_USER: str = os.getenv("WP_DB_USER", "xingxy_manyuzo")
-    WP_DB_PASSWORD: str = os.getenv("WP_DB_PASSWORD", "xingxymanyuzo_8501")
-    WP_DB_NAME: str = os.getenv("WP_DB_NAME", "xingxy_manyuzo")
-    WP_TABLE_PREFIX: str = os.getenv("WP_TABLE_PREFIX", "wp_")
-
     # ─── TG Bot 配置（用于动态获取 Bot username 和生成分享链接） ───
     AIRDROP_BOT_TOKEN: str = os.getenv("AIRDROP_BOT_TOKEN", "8714950601:AAHJyeekNJ5EovgA7SEjm4XIbFf3iU3W2kU")
 
