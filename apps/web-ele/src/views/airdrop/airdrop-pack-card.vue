@@ -124,6 +124,36 @@ function formatDate(dateStr: string | null): string {
       </div>
     </div>
 
+    <!-- 口令 + 链接 -->
+    <div class="pack-card-links">
+      <ElTooltip v-if="pack.auto_code" content="点击复制口令" placement="top">
+        <ElTag
+          effect="light"
+          type="warning"
+          round
+          class="copy-tag"
+          @click="emit('copyToClipboard', pack.auto_code!, '口令')"
+        >
+          <ElIcon :size="12"><KeyRound /></ElIcon>
+          <span class="copy-tag-text">{{ pack.auto_code }}</span>
+          <ElIcon :size="11" class="copy-icon"><Copy /></ElIcon>
+        </ElTag>
+      </ElTooltip>
+      <ElTooltip content="点击复制链接" placement="top">
+        <ElTag
+          effect="light"
+          type="success"
+          round
+          class="copy-tag"
+          @click="emit('copyToClipboard', pack.share_link, '链接')"
+        >
+          <ElIcon :size="12"><Link /></ElIcon>
+          <span class="copy-tag-text">{{ pack.share_link.length > 32 ? pack.share_link.slice(0, 32) + '...' : pack.share_link }}</span>
+          <ElIcon :size="11" class="copy-icon"><Copy /></ElIcon>
+        </ElTag>
+      </ElTooltip>
+    </div>
+
     <!-- 标签 -->
     <div class="pack-card-tags">
       <template v-if="editingTagsPackId === pack.pack_id">
@@ -172,36 +202,6 @@ function formatDate(dateStr: string | null): string {
           <span v-if="!pack.tags" style="margin-left: 2px">添加标签</span>
         </ElButton>
       </template>
-    </div>
-
-    <!-- 口令 + 链接 -->
-    <div class="pack-card-links">
-      <ElTooltip v-if="pack.auto_code" content="点击复制口令" placement="top">
-        <ElTag
-          effect="light"
-          type="warning"
-          round
-          class="copy-tag"
-          @click="emit('copyToClipboard', pack.auto_code!, '口令')"
-        >
-          <ElIcon :size="12"><KeyRound /></ElIcon>
-          <span class="copy-tag-text">{{ pack.auto_code }}</span>
-          <ElIcon :size="11" class="copy-icon"><Copy /></ElIcon>
-        </ElTag>
-      </ElTooltip>
-      <ElTooltip content="点击复制链接" placement="top">
-        <ElTag
-          effect="light"
-          type="success"
-          round
-          class="copy-tag"
-          @click="emit('copyToClipboard', pack.share_link, '链接')"
-        >
-          <ElIcon :size="12"><Link /></ElIcon>
-          <span class="copy-tag-text">{{ pack.share_link.length > 32 ? pack.share_link.slice(0, 32) + '...' : pack.share_link }}</span>
-          <ElIcon :size="11" class="copy-icon"><Copy /></ElIcon>
-        </ElTag>
-      </ElTooltip>
     </div>
   </ElCard>
 </template>
