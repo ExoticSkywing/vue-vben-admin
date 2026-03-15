@@ -44,6 +44,7 @@ const emit = defineEmits<{
   'update:editingTagsList': [value: string[]];
   saveTagsEdit: [pack: AirdropApi.Pack];
   selectTag: [tagName: string];
+  removeTag: [pack: AirdropApi.Pack, tag: string];
   copyToClipboard: [text: string, label: string];
   deletePack: [packId: string];
 }>();
@@ -154,8 +155,10 @@ function formatDate(dateStr: string | null): string {
           effect="light"
           type="primary"
           round
+          closable
           class="clickable-tag"
           @click="emit('selectTag', tag)"
+          @close.stop="emit('removeTag', pack, tag)"
         >
           <span v-html="highlightText(tag, searchText)" />
         </ElTag>

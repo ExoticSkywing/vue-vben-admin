@@ -246,6 +246,23 @@ async function saveTagsEdit(pack: AirdropApi.Pack) {
   }
 }
 
+// ─── 快速删除标签 ───
+async function handleRemoveTag(pack: AirdropApi.Pack, tagToRemove: string) {
+  const currentTags = pack.tags
+    ? pack.tags.split(',').map((t) => t.trim()).filter(Boolean)
+    : [];
+  const newTags = currentTags.filter((t) => t !== tagToRemove).join(',');
+  
+  try {
+    await updatePackApi(pack.pack_id, { tags: newTags });
+    pack.tags = newTags;
+    ElMessage.success('标签已删除');
+    await loadTags();
+  } catch (e: any) {
+    ElMessage.error(e?.message || '删除失败');
+  }
+}
+
 // ─── 删除 ───
 async function handleDelete(packId: string) {
   try {
@@ -379,6 +396,7 @@ onUnmounted(() => {
               @update:editing-tags-list="editingTagsList = $event"
               @save-tags-edit="saveTagsEdit"
               @select-tag="selectTag"
+              @remove-tag="handleRemoveTag"
               @copy-to-clipboard="copyToClipboard"
               @delete-pack="handleDelete"
             />

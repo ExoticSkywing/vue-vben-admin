@@ -611,10 +611,26 @@ async def get_tags(request: Request):
                     group_ids,
                 )
                 members_rows = cur.fetchall()
+                
+                # 清理计数为0的标签（自动从分组中移除）
+                tags_to_remove = []
+                for m in members_rows:
+                    if m["tag_name"] not in all_tags:
+                        tags_to_remove.append((m["group_id"], m["tag_name"]))
+                
+                if tags_to_remove:
+                    for group_id, tag_name in tags_to_remove:
+                        cur.execute(
+                            "DELETE FROM tag_group_members WHERE group_id = %s AND tag_name = %s",
+                            (group_id, tag_name),
+                        )
+                
+                # 构建分组结果（只包含计数>0的标签）
                 members_map = {}
                 for m in members_rows:
-                    members_map.setdefault(m["group_id"], []).append(m["tag_name"])
-                    grouped_tag_names.add(m["tag_name"])
+                    if m["tag_name"] in all_tags:  # 只保留有计数的标签
+                        members_map.setdefault(m["group_id"], []).append(m["tag_name"])
+                        grouped_tag_names.add(m["tag_name"])
 
                 for g in groups_rows:
                     g_tags = members_map.get(g["id"], [])
@@ -623,7 +639,7 @@ async def get_tags(request: Request):
                         "name": g["group_name"],
                         "sort_order": g["sort_order"],
                         "tags": [
-                            {"tag": t, "count": all_tags.get(t, 0)}
+                            {"tag": t, "count": all_tags[t]}
                             for t in g_tags
                         ],
                     })
