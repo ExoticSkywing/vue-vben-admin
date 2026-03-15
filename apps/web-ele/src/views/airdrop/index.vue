@@ -1,32 +1,35 @@
 <script setup lang="ts">
 /**
- * 空投包管理页 — 搜索优先的链接检索器
- * 核心交互：搜索框 → 输入关键词 → 列表实时过滤 → 复制链接/口令 → 走人
+ * 空投包管理页 — 搜索优先的链接检索器 v4
+ * 编排器：状态管理 + 数据加载 + 子组件组合
  */
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+
+import { Search } from '@vben/icons';
 
 import {
   ElAlert,
-  ElButton,
-  ElCard,
   ElEmpty,
+  ElIcon,
   ElInput,
-  ElLoading,
   ElMessage,
   ElMessageBox,
   ElPagination,
-  ElSpace,
-  ElTag,
-  ElTooltip,
 } from 'element-plus';
 
 import {
   checkIdentityApi,
   deletePackApi,
+  getTagsApi,
   listPacksApi,
   updatePackApi,
 } from '#/api/airdrop';
 import type { AirdropApi } from '#/api/airdrop';
+
+import AirdropGroupDrawer from './airdrop-group-drawer.vue';
+import AirdropMobileTags from './airdrop-mobile-tags.vue';
+import AirdropPackCard from './airdrop-pack-card.vue';
+import AirdropSidebar from './airdrop-sidebar.vue';
 
 defineOptions({ name: 'AirdropPacks' });
 
@@ -41,10 +44,52 @@ const total = ref(0);
 const currentPage = ref(1);
 const pageSize = ref(20);
 
+// 标签/分组筛选
+const tagsData = ref<AirdropApi.TagsResult | null>(null);
+const activeGroupId = ref<number>(0);
+const activeTag = ref<string>('');
+const expandedGroups = ref<string[]>([]);
+
+// 编辑状态
+const editingNotePackId = ref<string | null>(null);
+const editingNote = ref('');
+const editingTagsPackId = ref<string | null>(null);
+const editingTagsList = ref<string[]>([]);
+
+// 分组管理 Drawer
+const drawerVisible = ref(false);
+
+// 响应式
+const isMobile = ref(false);
+function checkMobile() {
+  isMobile.value = window.innerWidth < 768;
+}
+
 // 搜索防抖
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
 const isBound = computed(() => identity.value?.bound ?? false);
+
+// 所有已有标签（用于 ElSelect 下拉选项）
+const allExistingTags = computed(() => {
+  if (!tagsData.value) return [];
+  const tags = new Set<string>();
+  for (const g of tagsData.value.groups) {
+    for (const t of g.tags) tags.add(t.tag);
+  }
+  for (const t of tagsData.value.ungrouped_tags) tags.add(t.tag);
+  return [...tags].sort();
+});
+
+// 搜索框 placeholder
+const searchPlaceholder = computed(() => {
+  if (activeTag.value) return `在 #${activeTag.value} 中搜索...`;
+  if (activeGroupId.value > 0) {
+    const g = tagsData.value?.groups.find((g) => g.id === activeGroupId.value);
+    return g ? `在「${g.name}」中搜索...` : '搜索备注、标签、口令...';
+  }
+  return '搜索备注、标签、口令...';
+});
 
 // ─── 身份检查 ───
 async function checkIdentity() {
@@ -58,16 +103,28 @@ async function checkIdentity() {
   }
 }
 
+// ─── 标签数据 ───
+async function loadTags() {
+  try {
+    tagsData.value = await getTagsApi();
+  } catch {
+    tagsData.value = null;
+  }
+}
+
 // ─── 数据加载 ───
 async function loadPacks() {
   if (!isBound.value) return;
   loading.value = true;
   try {
-    const result = await listPacksApi({
+    const params: Record<string, any> = {
       search: searchText.value,
       page: currentPage.value,
       page_size: pageSize.value,
-    });
+    };
+    if (activeTag.value) params.tag = activeTag.value;
+    else if (activeGroupId.value > 0) params.group_id = activeGroupId.value;
+    const result = await listPacksApi(params);
     packs.value = result.items;
     total.value = result.total;
   } catch (e: any) {
@@ -85,8 +142,47 @@ watch(searchText, () => {
     loadPacks();
   }, 300);
 });
-
 watch(currentPage, () => loadPacks());
+
+// ─── 标签/分组筛选 ───
+function toggleGroup(group: AirdropApi.TagGroup) {
+  const key = String(group.id);
+  const idx = expandedGroups.value.indexOf(key);
+  if (idx >= 0) {
+    expandedGroups.value.splice(idx, 1);
+  } else {
+    expandedGroups.value.push(key);
+  }
+  selectGroup(group.id);
+}
+
+function selectGroup(groupId: number) {
+  activeGroupId.value = groupId;
+  activeTag.value = '';
+  currentPage.value = 1;
+  loadPacks();
+}
+
+function selectTag(tagName: string) {
+  activeTag.value = tagName;
+  activeGroupId.value = 0;
+  currentPage.value = 1;
+  loadPacks();
+}
+
+function selectUntagged() {
+  activeTag.value = '__untagged__';
+  activeGroupId.value = 0;
+  currentPage.value = 1;
+  loadPacks();
+}
+
+function clearFilter() {
+  activeGroupId.value = 0;
+  activeTag.value = '';
+  currentPage.value = 1;
+  loadPacks();
+}
 
 // ─── 复制 ───
 async function copyToClipboard(text: string, label: string) {
@@ -94,7 +190,6 @@ async function copyToClipboard(text: string, label: string) {
     await navigator.clipboard.writeText(text);
     ElMessage.success(`${label} 已复制`);
   } catch {
-    // fallback
     const textarea = document.createElement('textarea');
     textarea.value = text;
     document.body.appendChild(textarea);
@@ -105,45 +200,45 @@ async function copyToClipboard(text: string, label: string) {
   }
 }
 
-// ─── 行内编辑 ───
-const editingPackId = ref<string | null>(null);
-const editingName = ref('');
-
-function startEditName(pack: AirdropApi.Pack) {
-  editingPackId.value = pack.pack_id;
-  editingName.value = pack.name || '';
+// ─── 备注编辑 ───
+function startEditNote(pack: AirdropApi.Pack) {
+  editingNotePackId.value = pack.pack_id;
+  editingNote.value = pack.name || '';
 }
 
-async function saveEditName(pack: AirdropApi.Pack) {
+async function saveNote(pack: AirdropApi.Pack) {
+  if (editingNotePackId.value !== pack.pack_id) return;
   try {
-    await updatePackApi(pack.pack_id, { name: editingName.value });
-    pack.name = editingName.value;
-    ElMessage.success('名称已更新');
+    await updatePackApi(pack.pack_id, { name: editingNote.value });
+    pack.name = editingNote.value;
+    ElMessage.success('备注已更新');
   } catch (e: any) {
     ElMessage.error(e?.message || '更新失败');
   } finally {
-    editingPackId.value = null;
+    editingNotePackId.value = null;
   }
 }
 
-function cancelEditName() {
-  editingPackId.value = null;
+function cancelEditNote() {
+  editingNotePackId.value = null;
 }
 
 // ─── 标签编辑 ───
-const editingTagsPackId = ref<string | null>(null);
-const editingTags = ref('');
-
 function startEditTags(pack: AirdropApi.Pack) {
   editingTagsPackId.value = pack.pack_id;
-  editingTags.value = pack.tags || '';
+  editingTagsList.value = pack.tags
+    ? pack.tags.split(',').map((t) => t.trim()).filter(Boolean)
+    : [];
 }
 
-async function saveEditTags(pack: AirdropApi.Pack) {
+async function saveTagsEdit(pack: AirdropApi.Pack) {
+  if (editingTagsPackId.value !== pack.pack_id) return;
   try {
-    await updatePackApi(pack.pack_id, { tags: editingTags.value });
-    pack.tags = editingTags.value;
+    const newTags = editingTagsList.value.join(',');
+    await updatePackApi(pack.pack_id, { tags: newTags });
+    pack.tags = newTags;
     ElMessage.success('标签已更新');
+    await loadTags();
   } catch (e: any) {
     ElMessage.error(e?.message || '更新失败');
   } finally {
@@ -161,7 +256,7 @@ async function handleDelete(packId: string) {
     });
     await deletePackApi(packId);
     ElMessage.success('删除成功');
-    await loadPacks();
+    await Promise.all([loadPacks(), loadTags()]);
   } catch (e: any) {
     if (e !== 'cancel') {
       ElMessage.error(e?.message || '删除失败');
@@ -169,206 +264,229 @@ async function handleDelete(packId: string) {
   }
 }
 
-// ─── 格式化 ───
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '-';
-  const d = new Date(dateStr);
-  const month = d.getMonth() + 1;
-  const day = d.getDate();
-  const hour = String(d.getHours()).padStart(2, '0');
-  const min = String(d.getMinutes()).padStart(2, '0');
-  return `${month}月${day}日 ${hour}:${min}`;
-}
-
-function parseTags(tags: string | null): string[] {
-  if (!tags) return [];
-  return tags
-    .split(',')
-    .map((t) => t.trim())
-    .filter(Boolean);
+// ─── 键盘快捷键 ───
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
+    e.preventDefault();
+    document.querySelector<HTMLInputElement>('.search-input input')?.focus();
+  }
+  if (e.key === 'Escape') {
+    clearFilter();
+    searchText.value = '';
+  }
 }
 
 // ─── 生命周期 ───
 onMounted(async () => {
+  checkMobile();
+  window.addEventListener('resize', checkMobile);
+  window.addEventListener('keydown', handleKeydown);
   await checkIdentity();
   if (isBound.value) {
-    await loadPacks();
+    await Promise.all([loadPacks(), loadTags()]);
   }
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', checkMobile);
+  window.removeEventListener('keydown', handleKeydown);
 });
 </script>
 
 <template>
-  <div class="p-5">
-    <!-- 未绑定提示 -->
-    <div v-if="identityLoading" v-loading="true" class="py-20" />
+  <div class="airdrop-page">
+    <!-- 未绑定 / 加载中 -->
+    <div v-if="identityLoading" v-loading="true" style="padding: 80px 0" />
 
     <template v-else-if="!isBound">
       <ElAlert
         type="warning"
         show-icon
         :closable="false"
-        class="mx-auto max-w-lg"
+        class="mx-auto mt-10 max-w-lg"
         title="需要绑定站点账号"
         description="请先在 Telegram 小芽精灵中发送 /bind 绑定站点账号后，刷新此页面即可使用空投包管理。"
       />
     </template>
 
     <template v-else>
-      <!-- 搜索栏 -->
-      <div class="mb-5 flex items-center gap-3">
-        <ElInput
-          v-model="searchText"
-          placeholder="搜索包名、口令、标签..."
-          size="large"
-          clearable
-          class="max-w-xl flex-1"
-          prefix-icon="Search"
+      <div class="airdrop-layout">
+        <!-- 侧边栏（桌面端） -->
+        <AirdropSidebar
+          v-if="!isMobile"
+          :tags-data="tagsData"
+          :active-group-id="activeGroupId"
+          :active-tag="activeTag"
+          :expanded-groups="expandedGroups"
+          @clear-filter="clearFilter"
+          @select-group="selectGroup"
+          @select-tag="selectTag"
+          @select-untagged="selectUntagged"
+          @toggle-group="toggleGroup"
+          @open-drawer="drawerVisible = true"
         />
-        <span class="text-sm text-gray-400 whitespace-nowrap">
-          共 {{ total }} 个空投包
-        </span>
-      </div>
 
-      <!-- 列表 -->
-      <div v-loading="loading">
-        <div v-if="packs.length === 0 && !loading" class="py-20">
-          <ElEmpty description="暂无空投包" />
-        </div>
+        <!-- 移动端顶部标签栏 -->
+        <AirdropMobileTags
+          v-if="isMobile"
+          :tags-data="tagsData"
+          :active-group-id="activeGroupId"
+          :active-tag="activeTag"
+          @clear-filter="clearFilter"
+          @select-group="selectGroup"
+          @select-tag="selectTag"
+          @select-untagged="selectUntagged"
+          @open-drawer="drawerVisible = true"
+        />
 
-        <div class="space-y-3">
-          <ElCard
-            v-for="pack in packs"
-            :key="pack.pack_id"
-            shadow="hover"
-            :body-style="{ padding: '16px' }"
-          >
-            <div class="flex items-start justify-between gap-4">
-              <!-- 左侧：包名 + 标签 + 时间 -->
-              <div class="min-w-0 flex-1">
-                <!-- 包名 -->
-                <div class="mb-1 flex items-center gap-2">
-                  <span class="text-lg">📦</span>
-                  <template v-if="editingPackId === pack.pack_id">
-                    <ElInput
-                      v-model="editingName"
-                      size="small"
-                      class="max-w-xs"
-                      placeholder="输入包名..."
-                      @keyup.enter="saveEditName(pack)"
-                      @blur="saveEditName(pack)"
-                    />
-                    <ElButton size="small" link @click="cancelEditName">
-                      取消
-                    </ElButton>
-                  </template>
-                  <template v-else>
-                    <span
-                      class="cursor-pointer font-medium hover:text-blue-500"
-                      @click="startEditName(pack)"
-                    >
-                      {{ pack.name || '(未命名 - 点击编辑)' }}
-                    </span>
-                    <span class="text-xs text-gray-400">
-                      {{ pack.item_count }} 项
-                    </span>
-                  </template>
-                </div>
+        <!-- 主内容区 -->
+        <main class="airdrop-main">
+          <div class="search-bar">
+            <ElInput
+              v-model="searchText"
+              :placeholder="searchPlaceholder"
+              size="large"
+              clearable
+              class="search-input"
+            >
+              <template #prefix>
+                <ElIcon :size="18"><Search /></ElIcon>
+              </template>
+            </ElInput>
+            <span class="search-count">共 {{ total }} 个</span>
+          </div>
 
-                <!-- 标签 -->
-                <div class="mb-1 flex flex-wrap items-center gap-1">
-                  <template v-if="editingTagsPackId === pack.pack_id">
-                    <ElInput
-                      v-model="editingTags"
-                      size="small"
-                      class="max-w-xs"
-                      placeholder="标签逗号分隔，如：设计,教程"
-                      @keyup.enter="saveEditTags(pack)"
-                      @blur="saveEditTags(pack)"
-                    />
-                  </template>
-                  <template v-else>
-                    <ElTag
-                      v-for="tag in parseTags(pack.tags)"
-                      :key="tag"
-                      size="small"
-                      class="cursor-pointer"
-                      @click="startEditTags(pack)"
-                    >
-                      #{{ tag }}
-                    </ElTag>
-                    <ElTag
-                      v-if="!pack.tags"
-                      size="small"
-                      type="info"
-                      class="cursor-pointer"
-                      style="border-style: dashed"
-                      @click="startEditTags(pack)"
-                    >
-                      + 添加标签
-                    </ElTag>
-                  </template>
-                </div>
-
-                <!-- 时间 -->
-                <span class="text-xs text-gray-400">
-                  {{ formatDate(pack.created_at) }}
-                </span>
-              </div>
-
-              <!-- 右侧：口令 + 操作按钮 -->
-              <div class="flex shrink-0 flex-col items-end gap-2">
-                <!-- 口令展示 -->
-                <div v-if="pack.auto_code" class="flex items-center gap-1">
-                  <code class="rounded bg-gray-100 px-2 py-0.5 font-mono text-sm">
-                    🔑 {{ pack.auto_code }}
-                  </code>
-                </div>
-
-                <!-- 操作按钮 -->
-                <ElSpace>
-                  <ElTooltip content="复制提货口令" placement="top">
-                    <ElButton
-                      v-if="pack.auto_code"
-                      size="small"
-                      @click="copyToClipboard(pack.auto_code!, '口令')"
-                    >
-                      📋 口令
-                    </ElButton>
-                  </ElTooltip>
-                  <ElTooltip content="复制分享链接" placement="top">
-                    <ElButton
-                      size="small"
-                      type="primary"
-                      plain
-                      @click="copyToClipboard(pack.share_link, '链接')"
-                    >
-                      🔗 链接
-                    </ElButton>
-                  </ElTooltip>
-                  <ElButton
-                    size="small"
-                    type="danger"
-                    plain
-                    @click="handleDelete(pack.pack_id)"
-                  >
-                    删除
-                  </ElButton>
-                </ElSpace>
-              </div>
+          <div v-loading="loading" class="pack-grid">
+            <div v-if="packs.length === 0 && !loading" style="padding: 60px 0; grid-column: 1 / -1">
+              <ElEmpty description="暂无空投包" />
             </div>
-          </ElCard>
-        </div>
+
+            <AirdropPackCard
+              v-for="pack in packs"
+              :key="pack.pack_id"
+              :pack="pack"
+              :search-text="searchText"
+              :editing-note-pack-id="editingNotePackId"
+              :editing-note="editingNote"
+              :editing-tags-pack-id="editingTagsPackId"
+              :editing-tags-list="editingTagsList"
+              :all-existing-tags="allExistingTags"
+              @start-edit-note="startEditNote"
+              @update:editing-note="editingNote = $event"
+              @save-note="saveNote"
+              @cancel-edit-note="cancelEditNote"
+              @start-edit-tags="startEditTags"
+              @update:editing-tags-list="editingTagsList = $event"
+              @save-tags-edit="saveTagsEdit"
+              @select-tag="selectTag"
+              @copy-to-clipboard="copyToClipboard"
+              @delete-pack="handleDelete"
+            />
+          </div>
+
+          <div v-if="total > pageSize" class="pack-pagination">
+            <ElPagination
+              v-model:current-page="currentPage"
+              :total="total"
+              :page-size="pageSize"
+              :layout="isMobile ? 'prev, pager, next' : 'total, prev, pager, next, jumper'"
+              :small="isMobile"
+              background
+            />
+          </div>
+        </main>
       </div>
 
-      <!-- 分页 -->
-      <div v-if="total > pageSize" class="mt-5 flex justify-center">
-        <ElPagination
-          v-model:current-page="currentPage"
-          :total="total"
-          :page-size="pageSize"
-          layout="total, prev, pager, next, jumper"
-        />
-      </div>
+      <!-- 分组管理 Drawer -->
+      <AirdropGroupDrawer
+        v-model:visible="drawerVisible"
+        :tags-data="tagsData"
+        :is-mobile="isMobile"
+        @tags-changed="loadTags"
+      />
     </template>
   </div>
 </template>
+
+<style scoped>
+.airdrop-page {
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--el-bg-color-page);
+  color: var(--el-text-color-primary);
+}
+.airdrop-layout {
+  display: flex;
+  height: calc(100vh - 90px);
+  overflow: hidden;
+}
+
+/* 主内容区 */
+.airdrop-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px;
+  min-width: 0;
+  background-color: var(--el-bg-color-page);
+}
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.search-input {
+  flex: 1;
+  max-width: 560px;
+}
+.search-count {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+
+/* 卡片网格 */
+.pack-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  min-height: 200px;
+}
+
+/* 分页 */
+.pack-pagination {
+  display: flex;
+  justify-content: center;
+  padding: 20px 0 8px;
+}
+
+/* 响应式 */
+@media (max-width: 1199px) {
+  .pack-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 767px) {
+  .airdrop-layout {
+    flex-direction: column;
+    height: auto;
+  }
+  .airdrop-main {
+    padding: 16px 12px;
+  }
+  .search-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .search-input {
+    max-width: none;
+  }
+  .search-count {
+    text-align: right;
+  }
+  .pack-grid {
+    gap: 10px;
+  }
+}
+</style>
