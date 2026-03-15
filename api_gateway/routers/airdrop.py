@@ -125,6 +125,19 @@ class CodeUpdateRequest(BaseModel):
     is_active: Optional[bool] = None
 
 
+class TagGroupCreateRequest(BaseModel):
+    group_name: str
+
+
+class TagGroupUpdateRequest(BaseModel):
+    group_name: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
+class TagGroupMembersRequest(BaseModel):
+    tags: List[str]
+
+
 # ═══════════════════════════════════════════════════
 # API 路由
 # ═══════════════════════════════════════════════════
@@ -133,10 +146,12 @@ class CodeUpdateRequest(BaseModel):
 async def list_packs(
     request: Request,
     search: str = Query("", description="搜索包名、标签、口令"),
+    tag: str = Query("", description="筛选标签，__untagged__ 表示无标签"),
+    group_id: int = Query(0, description="筛选标签分组 ID"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ):
-    """列出空投包（支持搜索/分页），核心检索接口"""
+    """列出空投包（支持搜索/分页/标签筛选/分组筛选），核心检索接口"""
     user = _get_current_user(request)
     tg_id = user["tg_user_id"]
 
@@ -157,6 +172,28 @@ async def list_packs(
             if not user["is_super"]:
                 conditions.append("rp.admin_id = %s")
                 params.append(tg_id)
+
+            # 标签筛选
+            if tag.strip():
+                if tag.strip() == "__untagged__":
+                    conditions.append("(rp.tags IS NULL OR rp.tags = '')")
+                else:
+                    conditions.append("FIND_IN_SET(%s, rp.tags)")
+                    params.append(tag.strip())
+
+            # 分组筛选：查该组所有 tag_name，OR 拼接 FIND_IN_SET
+            if group_id > 0 and not tag.strip():
+                cur.execute(
+                    "SELECT tag_name FROM tag_group_members WHERE group_id = %s",
+                    (group_id,),
+                )
+                group_tags = [r["tag_name"] for r in cur.fetchall()]
+                if group_tags:
+                    tag_conditions = " OR ".join(["FIND_IN_SET(%s, rp.tags)"] * len(group_tags))
+                    conditions.append(f"({tag_conditions})")
+                    params.extend(group_tags)
+                else:
+                    conditions.append("0")
 
             # 搜索：匹配包名、标签、口令
             if search.strip():
@@ -489,6 +526,263 @@ async def update_code(request: Request, code_id: int, body: CodeUpdateRequest):
                 )
 
             return {"code": 0, "message": "更新成功"}
+    finally:
+        conn.close()
+
+
+# ─── 标签聚合 + 分组管理 ───
+
+@router.get("/tags")
+async def get_tags(request: Request):
+    """获取标签列表（含分组、计数），侧边栏导航数据源"""
+    user = _get_current_user(request)
+    tg_id = user["tg_user_id"]
+
+    if not tg_id:
+        raise HTTPException(status_code=403, detail="请先绑定站点账号")
+
+    conn = _get_airdrop_conn()
+    try:
+        with conn.cursor() as cur:
+            # 权限过滤条件
+            owner_cond = ""
+            owner_params = []
+            if not user["is_super"]:
+                owner_cond = "AND rp.admin_id = %s"
+                owner_params = [tg_id]
+
+            # 1. 获取所有标签及计数（从 resource_packs.tags 逗号分隔字段拆分）
+            cur.execute(
+                f"""
+                SELECT TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(rp.tags, ',', numbers.n), ',', -1)) AS tag_name,
+                       COUNT(*) AS cnt
+                FROM resource_packs rp
+                JOIN (
+                    SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
+                    UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8
+                    UNION ALL SELECT 9 UNION ALL SELECT 10
+                ) numbers
+                ON CHAR_LENGTH(rp.tags) - CHAR_LENGTH(REPLACE(rp.tags, ',', '')) >= numbers.n - 1
+                WHERE rp.status = 'done'
+                  AND rp.tags IS NOT NULL AND rp.tags != ''
+                  {owner_cond}
+                GROUP BY tag_name
+                HAVING tag_name != ''
+                ORDER BY cnt DESC
+                """,
+                owner_params,
+            )
+            all_tags = {row["tag_name"]: row["cnt"] for row in cur.fetchall()}
+
+            # 2. 未分类数量（无标签的包）
+            cur.execute(
+                f"""
+                SELECT COUNT(*) AS cnt FROM resource_packs rp
+                WHERE rp.status = 'done' AND (rp.tags IS NULL OR rp.tags = '')
+                {owner_cond}
+                """,
+                owner_params,
+            )
+            untagged_count = cur.fetchone()["cnt"]
+
+            # 3. 总数
+            cur.execute(
+                f"SELECT COUNT(*) AS cnt FROM resource_packs rp WHERE rp.status = 'done' {owner_cond}",
+                owner_params,
+            )
+            total = cur.fetchone()["cnt"]
+
+            # 4. 获取用户的标签分组
+            cur.execute(
+                "SELECT id, group_name, sort_order FROM tag_groups WHERE owner_tg_id = %s ORDER BY sort_order, id",
+                (tg_id,),
+            )
+            groups_rows = cur.fetchall()
+
+            # 5. 获取所有分组成员
+            group_ids = [g["id"] for g in groups_rows]
+            grouped_tag_names = set()
+            groups_result = []
+
+            if group_ids:
+                placeholders = ",".join(["%s"] * len(group_ids))
+                cur.execute(
+                    f"SELECT group_id, tag_name FROM tag_group_members WHERE group_id IN ({placeholders})",
+                    group_ids,
+                )
+                members_rows = cur.fetchall()
+                members_map = {}
+                for m in members_rows:
+                    members_map.setdefault(m["group_id"], []).append(m["tag_name"])
+                    grouped_tag_names.add(m["tag_name"])
+
+                for g in groups_rows:
+                    g_tags = members_map.get(g["id"], [])
+                    groups_result.append({
+                        "id": g["id"],
+                        "name": g["group_name"],
+                        "sort_order": g["sort_order"],
+                        "tags": [
+                            {"tag": t, "count": all_tags.get(t, 0)}
+                            for t in g_tags
+                        ],
+                    })
+            else:
+                for g in groups_rows:
+                    groups_result.append({
+                        "id": g["id"],
+                        "name": g["group_name"],
+                        "sort_order": g["sort_order"],
+                        "tags": [],
+                    })
+
+            # 6. 未分组标签
+            ungrouped_tags = [
+                {"tag": t, "count": c}
+                for t, c in all_tags.items()
+                if t not in grouped_tag_names
+            ]
+            ungrouped_tags.sort(key=lambda x: x["count"], reverse=True)
+
+            return {
+                "code": 0,
+                "data": {
+                    "groups": groups_result,
+                    "ungrouped_tags": ungrouped_tags,
+                    "untagged_count": untagged_count,
+                    "total": total,
+                },
+                "message": "ok",
+            }
+    finally:
+        conn.close()
+
+
+@router.post("/tag-groups")
+async def create_tag_group(request: Request, body: TagGroupCreateRequest):
+    """创建标签分组"""
+    user = _get_current_user(request)
+    tg_id = user["tg_user_id"]
+    if not tg_id:
+        raise HTTPException(status_code=403, detail="请先绑定站点账号")
+
+    conn = _get_airdrop_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO tag_groups (owner_tg_id, group_name) VALUES (%s, %s)",
+                (tg_id, body.group_name.strip()),
+            )
+            new_id = cur.lastrowid
+            return {"code": 0, "data": {"id": new_id}, "message": "分组创建成功"}
+    finally:
+        conn.close()
+
+
+@router.put("/tag-groups/{group_id}")
+async def update_tag_group(request: Request, group_id: int, body: TagGroupUpdateRequest):
+    """重命名/排序标签分组"""
+    user = _get_current_user(request)
+    tg_id = user["tg_user_id"]
+    if not tg_id:
+        raise HTTPException(status_code=403, detail="请先绑定站点账号")
+
+    conn = _get_airdrop_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM tag_groups WHERE id = %s AND owner_tg_id = %s",
+                (group_id, tg_id),
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="分组不存在")
+
+            updates, params = [], []
+            if body.group_name is not None:
+                updates.append("group_name = %s")
+                params.append(body.group_name.strip())
+            if body.sort_order is not None:
+                updates.append("sort_order = %s")
+                params.append(body.sort_order)
+
+            if not updates:
+                return {"code": 0, "message": "无需更新"}
+
+            params.append(group_id)
+            cur.execute(
+                f"UPDATE tag_groups SET {', '.join(updates)} WHERE id = %s",
+                params,
+            )
+            return {"code": 0, "message": "分组更新成功"}
+    finally:
+        conn.close()
+
+
+@router.delete("/tag-groups/{group_id}")
+async def delete_tag_group(request: Request, group_id: int):
+    """删除标签分组（标签回到未分组）"""
+    user = _get_current_user(request)
+    tg_id = user["tg_user_id"]
+    if not tg_id:
+        raise HTTPException(status_code=403, detail="请先绑定站点账号")
+
+    conn = _get_airdrop_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM tag_groups WHERE id = %s AND owner_tg_id = %s",
+                (group_id, tg_id),
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="分组不存在")
+
+            cur.execute("DELETE FROM tag_group_members WHERE group_id = %s", (group_id,))
+            cur.execute("DELETE FROM tag_groups WHERE id = %s", (group_id,))
+
+            return {"code": 0, "message": "分组已删除"}
+    finally:
+        conn.close()
+
+
+@router.put("/tag-groups/{group_id}/members")
+async def set_group_members(request: Request, group_id: int, body: TagGroupMembersRequest):
+    """设置分组内标签列表（全量替换）"""
+    user = _get_current_user(request)
+    tg_id = user["tg_user_id"]
+    if not tg_id:
+        raise HTTPException(status_code=403, detail="请先绑定站点账号")
+
+    conn = _get_airdrop_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM tag_groups WHERE id = %s AND owner_tg_id = %s",
+                (group_id, tg_id),
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="分组不存在")
+
+            # 先从其他分组中移除这些标签（一个标签只属于一个组）
+            if body.tags:
+                tag_placeholders = ",".join(["%s"] * len(body.tags))
+                cur.execute(
+                    f"DELETE FROM tag_group_members WHERE tag_name IN ({tag_placeholders})",
+                    body.tags,
+                )
+
+            # 清空当前分组
+            cur.execute("DELETE FROM tag_group_members WHERE group_id = %s", (group_id,))
+
+            # 重新插入
+            if body.tags:
+                values = [(group_id, t.strip()) for t in body.tags if t.strip()]
+                if values:
+                    cur.executemany(
+                        "INSERT INTO tag_group_members (group_id, tag_name) VALUES (%s, %s)",
+                        values,
+                    )
+
+            return {"code": 0, "message": "分组标签已更新"}
     finally:
         conn.close()
 

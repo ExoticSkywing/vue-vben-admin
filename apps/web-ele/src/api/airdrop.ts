@@ -41,6 +41,25 @@ export namespace AirdropApi {
     is_super: boolean;
     bound: boolean;
   }
+
+  export interface TagItem {
+    tag: string;
+    count: number;
+  }
+
+  export interface TagGroup {
+    id: number;
+    name: string;
+    sort_order: number;
+    tags: TagItem[];
+  }
+
+  export interface TagsResult {
+    groups: TagGroup[];
+    ungrouped_tags: TagItem[];
+    untagged_count: number;
+    total: number;
+  }
 }
 
 /** 检查身份绑定状态 */
@@ -48,9 +67,11 @@ export async function checkIdentityApi() {
   return requestClient.get<AirdropApi.IdentityResult>('/airdrop/identity');
 }
 
-/** 列出空投包（支持搜索/分页） */
+/** 列出空投包（支持搜索/分页/标签筛选/分组筛选） */
 export async function listPacksApi(params: {
   search?: string;
+  tag?: string;
+  group_id?: number;
   page?: number;
   page_size?: number;
 }) {
@@ -98,4 +119,35 @@ export async function updateCodeApi(
   data: { is_active?: boolean },
 ) {
   return requestClient.put(`/airdrop/codes/${codeId}`, data);
+}
+
+/** 获取标签列表（含分组、计数） */
+export async function getTagsApi() {
+  return requestClient.get<AirdropApi.TagsResult>('/airdrop/tags');
+}
+
+/** 创建标签分组 */
+export async function createTagGroupApi(data: { group_name: string }) {
+  return requestClient.post<{ id: number }>('/airdrop/tag-groups', data);
+}
+
+/** 更新标签分组 */
+export async function updateTagGroupApi(
+  groupId: number,
+  data: { group_name?: string; sort_order?: number },
+) {
+  return requestClient.put(`/airdrop/tag-groups/${groupId}`, data);
+}
+
+/** 删除标签分组 */
+export async function deleteTagGroupApi(groupId: number) {
+  return requestClient.delete(`/airdrop/tag-groups/${groupId}`);
+}
+
+/** 设置分组内标签列表 */
+export async function setGroupMembersApi(
+  groupId: number,
+  data: { tags: string[] },
+) {
+  return requestClient.put(`/airdrop/tag-groups/${groupId}/members`, data);
 }
