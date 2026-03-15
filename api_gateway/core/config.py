@@ -37,15 +37,9 @@ class Settings(BaseSettings):
     # 授权 scope
     WP_OAUTH_SCOPE: str = "basic email profile"
 
-    # ─── 小芽空投机 MySQL (xiaoyaairdrop) ───
-    AIRDROP_DB_HOST: str = os.getenv("AIRDROP_DB_HOST", "localhost")
-    AIRDROP_DB_PORT: int = int(os.getenv("AIRDROP_DB_PORT", "3306"))
-    AIRDROP_DB_USER: str = os.getenv("AIRDROP_DB_USER", "xiaoyaairdrop")
-    AIRDROP_DB_PASSWORD: str = os.getenv("AIRDROP_DB_PASSWORD", "L3Ht7WJJmdAjDF6h")
-    AIRDROP_DB_NAME: str = os.getenv("AIRDROP_DB_NAME", "xiaoyaairdrop")
-
-    # ─── TG Bot 配置（用于动态获取 Bot username 和生成分享链接） ───
-    AIRDROP_BOT_TOKEN: str = os.getenv("AIRDROP_BOT_TOKEN", "8714950601:AAHJyeekNJ5EovgA7SEjm4XIbFf3iU3W2kU")
+    # ─── 小芽空投机内部 API（替代直连数据库，精灵模式） ───
+    AIRDROP_API_BASE: str = os.getenv("AIRDROP_API_BASE", "http://127.0.0.1:18690")
+    AIRDROP_API_KEY: str = os.getenv("AIRDROP_API_KEY", "07fe3ff58981bfb2bffcb164f002f514afea1abe7b114047")
 
     # 超级管理员 TG user ID（可查看所有空投包）
     SUPER_ADMIN_TG_ID: int = int(os.getenv("SUPER_ADMIN_TG_ID", "1861667385"))
