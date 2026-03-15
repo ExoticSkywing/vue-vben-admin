@@ -291,6 +291,7 @@ function formatDate(dateStr: string | null): string {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  margin-top: 14px;
   margin-bottom: 10px;
 }
 .clickable-tag {
