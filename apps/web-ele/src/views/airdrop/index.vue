@@ -967,25 +967,29 @@ onUnmounted(() => {
   }
   .global-settings-group {
     width: 100%;
-    gap: 4px;
-    flex-wrap: nowrap;
-    overflow-x: auto;
+    gap: 6px;
   }
   .global-setting-item {
-    flex: 1;
-    min-width: 0;
-    padding: 4px 6px;
-    white-space: nowrap;
+    padding: 5px 8px;
   }
-  .setting-label {
-    font-size: 10px;
+  .global-setting-item:first-child {
+    flex: 0 0 auto;
+  }
+  .global-setting-item:first-child .setting-label {
     display: none;
   }
+  .global-setting-item:not(:first-child) {
+    flex: 1;
+    min-width: 0;
+  }
+  .setting-label {
+    font-size: 11px;
+  }
   .global-number-input {
-    width: 50px;
+    width: 65px;
   }
   .setting-unit {
-    font-size: 9px;
+    font-size: 10px;
   }
   .batch-bar {
     flex-direction: column;
