@@ -617,26 +617,24 @@ onUnmounted(() => {
 
         <!-- 主内容区 -->
         <main class="airdrop-main">
-          <!-- 顶部工具栏：搜索 + 视图切换 + 批量按钮 -->
-          <div class="toolbar">
-            <div class="search-bar">
-              <ElInput
-                v-model="searchText"
-                :placeholder="searchPlaceholder"
-                size="large"
-                clearable
-                class="search-input"
-                :class="{ 'search-input--focused': searchFocused }"
-                @focus="searchFocused = true"
-                @blur="searchFocused = false"
-              >
-                <template #prefix>
-                  <ElIcon :size="18"><Search /></ElIcon>
-                </template>
-              </ElInput>
-              <span class="search-count">共 {{ total }} 个</span>
-            </div>
+          <!-- 顶部搜索栏 -->
+          <div class="toolbar-search">
+            <ElInput
+              v-model="searchText"
+              :placeholder="searchPlaceholder"
+              size="large"
+              clearable
+              class="search-input"
+            >
+              <template #prefix>
+                <ElIcon :size="18"><Search /></ElIcon>
+              </template>
+            </ElInput>
+            <span class="search-count">共 {{ total }} 个</span>
+          </div>
 
+          <!-- 工具栏：视图切换 + 批量 + 全局设置 -->
+          <div class="toolbar">
             <div class="toolbar-actions">
               <ElRadioGroup
                 :model-value="viewMode"
@@ -662,20 +660,20 @@ onUnmounted(() => {
 
               <div class="global-settings-group">
                 <div class="global-setting-item">
+                  <ElIcon :size="14" :class="globalProtect ? 'protect-on' : 'protect-off'">
+                    <ShieldCheck v-if="globalProtect" />
+                    <ShieldOff v-else />
+                  </ElIcon>
                   <span class="setting-label">内容保护</span>
-                  <ElTooltip
-                    :content="globalProtect ? '已开启' : '已关闭'"
-                    placement="bottom"
-                  >
-                    <ElSwitch
-                      :model-value="globalProtect"
-                      :loading="settingsLoading"
-                      size="small"
-                      @update:model-value="(v: boolean) => toggleGlobalProtect(v)"
-                    />
-                  </ElTooltip>
+                  <ElSwitch
+                    :model-value="globalProtect"
+                    :loading="settingsLoading"
+                    size="small"
+                    @update:model-value="(v: boolean) => toggleGlobalProtect(v)"
+                  />
                 </div>
                 <div class="global-setting-item">
+                  <ElIcon :size="14" class="setting-icon"><UserRoundPen /></ElIcon>
                   <span class="setting-label">领取限制</span>
                   <ElInputNumber
                     :model-value="globalMaxClaims"
@@ -689,6 +687,7 @@ onUnmounted(() => {
                   <span class="setting-unit">次/人</span>
                 </div>
                 <div class="global-setting-item">
+                  <ElIcon :size="14" class="setting-icon"><Timer /></ElIcon>
                   <span class="setting-label">自动删除</span>
                   <ElInputNumber
                     :model-value="globalAutoDelete"
@@ -836,11 +835,18 @@ onUnmounted(() => {
   min-width: 0;
   background-color: var(--el-bg-color-page);
 }
+/* 顶部搜索栏 */
+.toolbar-search {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
 /* 工具栏 */
 .toolbar {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: flex-end;
   gap: 16px;
   margin-bottom: 16px;
   flex-wrap: wrap;
@@ -849,7 +855,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-shrink: 0;
+  flex: 1;
+  justify-content: flex-end;
 }
 .global-settings-group {
   display: flex;
@@ -886,27 +893,14 @@ onUnmounted(() => {
 .protect-off {
   color: var(--el-text-color-disabled);
 }
-.search-bar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex: 1;
-  min-width: 0;
-}
 .search-input {
-  max-width: 320px;
-  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.search-input--focused {
-  max-width: 600px;
-}
-.search-input :deep(.el-input__wrapper) {
-  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  flex: 1;
 }
 .search-count {
   font-size: 13px;
   color: var(--el-text-color-secondary);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* 批量操作栏 */
@@ -955,6 +949,14 @@ onUnmounted(() => {
   .airdrop-main {
     padding: 16px 12px;
   }
+  .toolbar-search {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .search-count {
+    text-align: right;
+  }
   .toolbar {
     flex-direction: column;
     gap: 10px;
@@ -962,40 +964,26 @@ onUnmounted(() => {
   .toolbar-actions {
     width: 100%;
     flex-wrap: wrap;
+    justify-content: flex-start;
   }
   .global-settings-group {
     width: 100%;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 6px;
   }
   .global-setting-item {
-    flex: 1;
-    min-width: 0;
-    padding: 4px 6px;
+    width: 100%;
+    padding: 4px 8px;
   }
   .setting-label {
     font-size: 11px;
+    flex: 1;
   }
   .global-number-input {
-    width: 60px;
+    width: 70px;
   }
   .setting-unit {
     font-size: 10px;
-  }
-  .search-bar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    width: 100%;
-  }
-  .search-input {
-    max-width: none;
-  }
-  .search-input--focused {
-    max-width: none;
-  }
-  .search-count {
-    text-align: right;
   }
   .batch-bar {
     flex-direction: column;
