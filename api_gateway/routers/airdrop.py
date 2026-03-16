@@ -113,10 +113,14 @@ class PackUpdateRequest(BaseModel):
     name: Optional[str] = None
     tags: Optional[str] = None
     protect_content: Optional[str] = None  # "true" | "false" | "inherit"
+    max_claims_per_user: Optional[str] = None  # 数字字符串 | "inherit"
+    auto_delete_seconds: Optional[str] = None  # 数字字符串 | "inherit"
 
 
 class SettingsUpdateRequest(BaseModel):
     protect_content: Optional[bool] = None
+    max_claims_per_user: Optional[int] = None
+    auto_delete_time: Optional[int] = None
 
 
 class CodeCreateRequest(BaseModel):
@@ -201,6 +205,8 @@ async def update_pack(request: Request, pack_id: str, body: PackUpdateRequest):
         "name": body.name,
         "tags": body.tags,
         "protect_content": body.protect_content,
+        "max_claims_per_user": body.max_claims_per_user,
+        "auto_delete_seconds": body.auto_delete_seconds,
     })
 
 
@@ -385,6 +391,8 @@ async def update_settings(request: Request, body: SettingsUpdateRequest):
         "tg_uid": tg_uid,
         "is_super": user["is_super"],
         "protect_content": body.protect_content,
+        "max_claims_per_user": body.max_claims_per_user,
+        "auto_delete_time": body.auto_delete_time,
     })
 
 

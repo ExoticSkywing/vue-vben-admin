@@ -5,7 +5,7 @@
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
-import { CheckCheck, RotateCcw, Search, ShieldCheck, ShieldOff, Trash2 } from '@vben/icons';
+import { CheckCheck, Hash, RotateCcw, Search, ShieldCheck, ShieldOff, Timer, Trash2 } from '@vben/icons';
 
 import {
   ElAlert,
@@ -19,6 +19,7 @@ import {
   ElPagination,
   ElRadioButton,
   ElRadioGroup,
+  ElInputNumber,
   ElSwitch,
   ElTooltip,
 } from 'element-plus';
@@ -72,6 +73,8 @@ const drawerVisible = ref(false);
 
 // 全局设置
 const globalProtect = ref(true);
+const globalMaxClaims = ref(0);
+const globalAutoDelete = ref(0);
 const settingsLoading = ref(false);
 
 // 回收站模式
@@ -131,8 +134,12 @@ async function loadSettings() {
   try {
     const result = await getSettingsApi();
     globalProtect.value = result.protect_content;
+    globalMaxClaims.value = result.max_claims_per_user;
+    globalAutoDelete.value = result.auto_delete_time;
   } catch {
     globalProtect.value = true;
+    globalMaxClaims.value = 0;
+    globalAutoDelete.value = 0;
   }
 }
 
@@ -145,6 +152,32 @@ async function toggleGlobalProtect(val: boolean) {
   } catch (e: any) {
     ElMessage.error(e?.message || '设置失败');
     globalProtect.value = !val;
+  } finally {
+    settingsLoading.value = false;
+  }
+}
+
+async function updateGlobalMaxClaims(val: number) {
+  settingsLoading.value = true;
+  try {
+    await updateSettingsApi({ max_claims_per_user: val });
+    globalMaxClaims.value = val;
+    ElMessage.success(val === 0 ? '全局领取次数：不限' : `全局领取次数：${val} 次`);
+  } catch (e: any) {
+    ElMessage.error(e?.message || '设置失败');
+  } finally {
+    settingsLoading.value = false;
+  }
+}
+
+async function updateGlobalAutoDelete(val: number) {
+  settingsLoading.value = true;
+  try {
+    await updateSettingsApi({ auto_delete_time: val });
+    globalAutoDelete.value = val;
+    ElMessage.success(val === 0 ? '全局自动删除：关闭' : `全局自动删除：${val} 秒`);
+  } catch (e: any) {
+    ElMessage.error(e?.message || '设置失败');
   } finally {
     settingsLoading.value = false;
   }
@@ -372,6 +405,40 @@ async function handleUpdateProtect(packId: string, value: boolean | null) {
   }
 }
 
+// ─── 领取次数限制切换 ───
+async function handleUpdateMaxClaims(packId: string, value: number | null) {
+  const pack = packs.value.find((p) => p.pack_id === packId);
+  if (!pack) return;
+  try {
+    const apiValue = value === null ? 'inherit' : String(value);
+    await updatePackApi(packId, { max_claims_per_user: apiValue });
+    pack.max_claims_per_user = value;
+    const label = value === null
+      ? '已恢复继承全局设置'
+      : value === 0 ? '已设为不限次数' : `已限制为每人 ${value} 次`;
+    ElMessage.success(label);
+  } catch (e: any) {
+    ElMessage.error(e?.message || '设置失败');
+  }
+}
+
+// ─── 自动删除切换 ───
+async function handleUpdateAutoDelete(packId: string, value: number | null) {
+  const pack = packs.value.find((p) => p.pack_id === packId);
+  if (!pack) return;
+  try {
+    const apiValue = value === null ? 'inherit' : String(value);
+    await updatePackApi(packId, { auto_delete_seconds: apiValue });
+    pack.auto_delete_seconds = value;
+    const label = value === null
+      ? '已恢复继承全局设置'
+      : value === 0 ? '已设为不自动删除' : `已设为 ${value} 秒后自动删除`;
+    ElMessage.success(label);
+  } catch (e: any) {
+    ElMessage.error(e?.message || '设置失败');
+  }
+}
+
 // ─── 删除（移入回收站） ───
 async function handleDelete(packId: string) {
   try {
@@ -589,23 +656,60 @@ onUnmounted(() => {
                 {{ batchMode ? '退出批量' : '批量操作' }}
               </ElButton>
 
-              <ElTooltip
-                :content="globalProtect ? '全局内容保护：已开启' : '全局内容保护：已关闭'"
-                placement="bottom"
-              >
-                <div class="global-protect-switch">
-                  <ElIcon :size="15" :class="globalProtect ? 'protect-on' : 'protect-off'">
-                    <ShieldCheck v-if="globalProtect" />
-                    <ShieldOff v-else />
-                  </ElIcon>
-                  <ElSwitch
-                    :model-value="globalProtect"
-                    :loading="settingsLoading"
-                    size="small"
-                    @update:model-value="(v: boolean) => toggleGlobalProtect(v)"
-                  />
-                </div>
-              </ElTooltip>
+              <div class="global-settings-group">
+                <ElTooltip
+                  :content="globalProtect ? '全局内容保护：已开启' : '全局内容保护：已关闭'"
+                  placement="bottom"
+                >
+                  <div class="global-setting-item">
+                    <ElIcon :size="14" :class="globalProtect ? 'protect-on' : 'protect-off'">
+                      <ShieldCheck v-if="globalProtect" />
+                      <ShieldOff v-else />
+                    </ElIcon>
+                    <ElSwitch
+                      :model-value="globalProtect"
+                      :loading="settingsLoading"
+                      size="small"
+                      @update:model-value="(v: boolean) => toggleGlobalProtect(v)"
+                    />
+                  </div>
+                </ElTooltip>
+                <ElTooltip
+                  :content="`全局领取限制：${globalMaxClaims === 0 ? '不限' : globalMaxClaims + ' 次/人'}`"
+                  placement="bottom"
+                >
+                  <div class="global-setting-item">
+                    <ElIcon :size="14" class="setting-icon"><Hash /></ElIcon>
+                    <ElInputNumber
+                      :model-value="globalMaxClaims"
+                      :min="0"
+                      :max="999"
+                      size="small"
+                      controls-position="right"
+                      class="global-number-input"
+                      @change="(v: number) => updateGlobalMaxClaims(v ?? 0)"
+                    />
+                  </div>
+                </ElTooltip>
+                <ElTooltip
+                  :content="`全局自动删除：${globalAutoDelete === 0 ? '关闭' : globalAutoDelete + ' 秒'}`"
+                  placement="bottom"
+                >
+                  <div class="global-setting-item">
+                    <ElIcon :size="14" class="setting-icon"><Timer /></ElIcon>
+                    <ElInputNumber
+                      :model-value="globalAutoDelete"
+                      :min="0"
+                      :max="86400"
+                      :step="10"
+                      size="small"
+                      controls-position="right"
+                      class="global-number-input"
+                      @change="(v: number) => updateGlobalAutoDelete(v ?? 0)"
+                    />
+                  </div>
+                </ElTooltip>
+              </div>
             </div>
           </div>
 
@@ -673,6 +777,8 @@ onUnmounted(() => {
               :selected="selectedPacks.has(pack.pack_id)"
               :is-trash="isTrashView"
               :global-protect="globalProtect"
+              :global-max-claims="globalMaxClaims"
+              :global-auto-delete="globalAutoDelete"
               @start-edit-note="startEditNote"
               @update:editing-note="editingNote = $event"
               @save-note="saveNote"
@@ -687,6 +793,8 @@ onUnmounted(() => {
               @restore-pack="handleRestore"
               @toggle-select="toggleSelect"
               @update-protect="handleUpdateProtect"
+              @update-max-claims="handleUpdateMaxClaims"
+              @update-auto-delete="handleUpdateAutoDelete"
             />
           </div>
 
@@ -750,11 +858,23 @@ onUnmounted(() => {
   gap: 10px;
   flex-shrink: 0;
 }
-.global-protect-switch {
+.global-settings-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.global-setting-item {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 0 4px;
+}
+.global-number-input {
+  width: 90px;
+}
+.setting-icon {
+  color: var(--el-text-color-secondary);
 }
 .protect-on {
   color: var(--el-color-success);

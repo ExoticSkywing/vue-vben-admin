@@ -68,6 +68,7 @@ export {
   ShieldCheck,
   ShieldOff,
   Tag,
+  Timer,
   Trash2,
   SearchX,
   Settings,

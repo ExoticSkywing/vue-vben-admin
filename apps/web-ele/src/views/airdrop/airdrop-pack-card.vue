@@ -4,6 +4,7 @@
  */
 import {
   Copy,
+  Hash,
   KeyRound,
   Link,
   Package,
@@ -11,6 +12,7 @@ import {
   RotateCcw,
   ShieldCheck,
   ShieldOff,
+  Timer,
   Trash2,
   X,
 } from '@vben/icons';
@@ -41,6 +43,8 @@ const props = defineProps<{
   selected: boolean;
   isTrash: boolean;
   globalProtect: boolean;
+  globalMaxClaims: number;
+  globalAutoDelete: number;
 }>();
 
 const emit = defineEmits<{
@@ -58,6 +62,8 @@ const emit = defineEmits<{
   restorePack: [packId: string];
   toggleSelect: [packId: string];
   updateProtect: [packId: string, value: boolean | null];
+  updateMaxClaims: [packId: string, value: number | null];
+  updateAutoDelete: [packId: string, value: number | null];
 }>();
 
 function parseTags(tags: string | null): string[] {
@@ -105,6 +111,60 @@ function protectLabel(): { text: string; type: 'inherited' | 'on' | 'off' } {
   return pc
     ? { text: '强制保护', type: 'on' }
     : { text: '强制公开', type: 'off' };
+}
+
+// 领取限制三态循环：null(继承) -> 1(限1次) -> 0(不限) -> null
+function cycleMaxClaims() {
+  const current = props.pack.max_claims_per_user;
+  let next: number | null;
+  if (current === null || current === undefined) {
+    next = 1;
+  } else if (current > 0) {
+    next = 0;
+  } else {
+    next = null;
+  }
+  emit('updateMaxClaims', props.pack.pack_id, next);
+}
+
+function claimsLabel(): { text: string; type: 'inherited' | 'limited' | 'unlimited' } {
+  const v = props.pack.max_claims_per_user;
+  if (v === null || v === undefined) {
+    return {
+      text: props.globalMaxClaims === 0 ? '继承·不限' : `继承·${props.globalMaxClaims}次`,
+      type: 'inherited',
+    };
+  }
+  return v === 0
+    ? { text: '不限次数', type: 'unlimited' }
+    : { text: `限${v}次`, type: 'limited' };
+}
+
+// 自动删除三态循环：null(继承) -> 60(60秒) -> 0(不删) -> null
+function cycleAutoDelete() {
+  const current = props.pack.auto_delete_seconds;
+  let next: number | null;
+  if (current === null || current === undefined) {
+    next = 60;
+  } else if (current > 0) {
+    next = 0;
+  } else {
+    next = null;
+  }
+  emit('updateAutoDelete', props.pack.pack_id, next);
+}
+
+function autoDeleteLabel(): { text: string; type: 'inherited' | 'active' | 'disabled' } {
+  const v = props.pack.auto_delete_seconds;
+  if (v === null || v === undefined) {
+    return {
+      text: props.globalAutoDelete === 0 ? '继承·不删' : `继承·${props.globalAutoDelete}s`,
+      type: 'inherited',
+    };
+  }
+  return v === 0
+    ? { text: '不自动删', type: 'disabled' }
+    : { text: `${v}s后删`, type: 'active' };
 }
 
 function formatDate(dateStr: string | null): string {
@@ -175,6 +235,22 @@ function formatDate(dateStr: string | null): string {
             <ShieldCheck v-if="protectLabel().type === 'inherited'" />
           </ElIcon>
           <span class="protect-badge-text">{{ protectLabel().text }}</span>
+        </span>
+        <span
+          class="claims-badge"
+          :class="`claims-badge--${claimsLabel().type}`"
+          @click.stop="cycleMaxClaims()"
+        >
+          <ElIcon :size="12"><Hash /></ElIcon>
+          <span class="claims-badge-text">{{ claimsLabel().text }}</span>
+        </span>
+        <span
+          class="autodel-badge"
+          :class="`autodel-badge--${autoDeleteLabel().type}`"
+          @click.stop="cycleAutoDelete()"
+        >
+          <ElIcon :size="12"><Timer /></ElIcon>
+          <span class="autodel-badge-text">{{ autoDeleteLabel().text }}</span>
         </span>
         <span class="meta-badge">{{ pack.item_count }} 项</span>
         <span class="meta-date">{{ formatDate(pack.created_at) }}</span>
@@ -394,6 +470,78 @@ function formatDate(dateStr: string | null): string {
 .protect-badge--off {
   color: #fff;
   background-color: var(--el-color-warning);
+}
+
+/* 领取限制徽章 */
+.claims-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.claims-badge:hover {
+  transform: scale(1.05);
+  filter: brightness(0.95);
+}
+.claims-badge-text {
+  line-height: 1.4;
+}
+.claims-badge--inherited {
+  color: var(--el-text-color-secondary);
+  background-color: var(--el-fill-color);
+  border: 1px dashed var(--el-border-color);
+}
+.claims-badge--limited {
+  color: #fff;
+  background-color: var(--el-color-primary);
+}
+.claims-badge--unlimited {
+  color: #fff;
+  background-color: #6b7280;
+}
+
+/* 自动删除徽章 */
+.autodel-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.autodel-badge:hover {
+  transform: scale(1.05);
+  filter: brightness(0.95);
+}
+.autodel-badge-text {
+  line-height: 1.4;
+}
+.autodel-badge--inherited {
+  color: var(--el-text-color-secondary);
+  background-color: var(--el-fill-color);
+  border: 1px dashed var(--el-border-color);
+}
+.autodel-badge--active {
+  color: #fff;
+  background-color: var(--el-color-danger);
+}
+.autodel-badge--disabled {
+  color: #fff;
+  background-color: #6b7280;
 }
 
 .meta-badge {

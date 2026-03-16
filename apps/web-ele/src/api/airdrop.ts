@@ -11,6 +11,8 @@ export namespace AirdropApi {
     name: string | null;
     tags: string | null;
     protect_content: boolean | null;
+    max_claims_per_user: number | null;
+    auto_delete_seconds: number | null;
     created_at: string | null;
     updated_at: string | null;
     deleted_at: string | null;
@@ -21,6 +23,8 @@ export namespace AirdropApi {
 
   export interface Settings {
     protect_content: boolean;
+    max_claims_per_user: number;
+    auto_delete_time: number;
   }
 
   export interface BatchResult {
@@ -100,7 +104,13 @@ export async function getPackDetailApi(packId: string) {
 /** 编辑空投包元数据 */
 export async function updatePackApi(
   packId: string,
-  data: { name?: string; tags?: string; protect_content?: string },
+  data: {
+    name?: string;
+    tags?: string;
+    protect_content?: string;
+    max_claims_per_user?: string;
+    auto_delete_seconds?: string;
+  },
 ) {
   return requestClient.put(`/airdrop/packs/${packId}`, data);
 }
@@ -199,6 +209,8 @@ export async function getSettingsApi() {
 /** 更新全局设置 */
 export async function updateSettingsApi(data: {
   protect_content?: boolean;
+  max_claims_per_user?: number;
+  auto_delete_time?: number;
 }) {
   return requestClient.put('/airdrop/settings', data);
 }
