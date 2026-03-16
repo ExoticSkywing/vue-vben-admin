@@ -24,6 +24,7 @@ import {
   ElCheckbox,
   ElIcon,
   ElInput,
+  ElInputNumber,
   ElOption,
   ElSelect,
   ElTag,
@@ -647,11 +648,19 @@ function formatDate(dateStr: string | null): string {
   background-color: var(--el-fill-color-light);
   border: 1px solid var(--el-color-primary);
   cursor: default;
+  user-select: auto;
+  pointer-events: auto;
 }
 .claims-badge--editing:hover,
 .autodel-badge--editing:hover {
   transform: none;
   filter: none;
+}
+.claims-badge--editing :deep(input),
+.autodel-badge--editing :deep(input) {
+  user-select: auto !important;
+  pointer-events: auto !important;
+  -webkit-user-select: auto !important;
 }
 .badge-input {
   width: 65px;
