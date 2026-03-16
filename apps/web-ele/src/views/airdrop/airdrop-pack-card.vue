@@ -257,7 +257,6 @@ function formatDate(dateStr: string | null): string {
           <span class="autodel-badge-text">{{ autoDeleteLabel().text }}</span>
         </span>
         <span class="meta-badge">{{ pack.item_count }} 项</span>
-        <span class="meta-date">{{ formatDate(pack.created_at) }}</span>
       </div>
     </div>
 
@@ -341,8 +340,9 @@ function formatDate(dateStr: string | null): string {
       </template>
     </div>
 
-    <!-- 删除/恢复按钮 - 右下角 -->
+    <!-- 删除/恢复按钮 + 日期 - 右下角 -->
     <div class="pack-card-action">
+      <span class="meta-date">{{ formatDate(pack.created_at) }}</span>
       <template v-if="isTrash">
         <ElButton
           size="small"

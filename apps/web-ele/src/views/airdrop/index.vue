@@ -901,6 +901,9 @@ onUnmounted(() => {
 .search-input--focused {
   max-width: 640px;
 }
+.search-input :deep(.el-input__wrapper) {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
 .search-count {
   font-size: 13px;
   color: var(--el-text-color-secondary);
@@ -959,7 +962,26 @@ onUnmounted(() => {
   }
   .toolbar-actions {
     width: 100%;
-    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .global-settings-group {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .global-setting-item {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 6px;
+  }
+  .setting-label {
+    font-size: 11px;
+  }
+  .global-number-input {
+    width: 60px;
+  }
+  .setting-unit {
+    font-size: 10px;
   }
   .search-bar {
     flex-direction: column;
@@ -968,6 +990,9 @@ onUnmounted(() => {
     width: 100%;
   }
   .search-input {
+    max-width: none;
+  }
+  .search-input--focused {
     max-width: none;
   }
   .search-count {
