@@ -389,13 +389,13 @@ async function handleBatchPurge() {
   if (!ids.length) return;
   try {
     const { value: cleanChannel } = await ElMessageBox.confirm(
-      `确认彻底删除选中的 ${ids.length} 个空投包？此操作不可恢复。
-       <div style="margin-top: 16px; padding: 12px; background-color: var(--el-color-danger-light-9); border-radius: 4px;">
+      `<p>确认彻底删除选中的 <b>${ids.length}</b> 个空投包？此操作不可恢复。</p>
+       <div style="margin-top: 16px;">
          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color: var(--el-color-danger)">
            <input type="checkbox" id="purge-clean-channel" style="accent-color: var(--el-color-danger);" />
            <span>同时清理 TG 频道中的文件消息</span>
          </label>
-         <div style="margin-top: 6px; font-size: 12px; color: var(--el-text-color-secondary); padding-left: 21px;">
+         <div style="margin-top: 6px; font-size: 12px; color: var(--el-color-warning); padding-left: 21px;">
            仅支持删除 48 小时内创建的空投包
          </div>
        </div>`,

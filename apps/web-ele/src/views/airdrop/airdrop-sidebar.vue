@@ -57,7 +57,7 @@ function groupTotalCount(group: AirdropApi.TagGroup): number {
       <ElTag size="small" round effect="plain" type="info">{{ tagsData?.total ?? 0 }}</ElTag>
     </div>
 
-    <!-- 未分类 -->
+    <!-- 无标签 -->
     <div
       class="sidebar-nav-item"
       :class="{ active: activeTag === '__untagged__' }"
@@ -65,7 +65,7 @@ function groupTotalCount(group: AirdropApi.TagGroup): number {
     >
       <span class="sidebar-nav-label">
         <ElIcon :size="15"><Inbox /></ElIcon>
-        未分类
+        无标签
       </span>
       <ElTag size="small" round effect="plain" type="info">{{ tagsData?.untagged_count ?? 0 }}</ElTag>
     </div>
@@ -138,12 +138,12 @@ function groupTotalCount(group: AirdropApi.TagGroup): number {
       </div>
     </template>
 
-    <!-- 管理分组 -->
+    <!-- 管理标签分组 -->
     <div class="sidebar-divider" />
     <div class="sidebar-nav-item manage" @click="emit('openDrawer')">
       <span class="sidebar-nav-label">
         <ElIcon :size="15"><Settings /></ElIcon>
-        管理分组
+        管理标签分组
       </span>
     </div>
   </aside>

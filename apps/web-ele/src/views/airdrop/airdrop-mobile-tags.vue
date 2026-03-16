@@ -73,7 +73,7 @@ function activeGroupTags(): AirdropApi.TagItem[] {
           class="mobile-pill"
           @click="emit('selectUntagged')"
         >
-          未分类 {{ tagsData?.untagged_count ?? 0 }}
+          无标签 {{ tagsData?.untagged_count ?? 0 }}
         </ElTag>
         <ElTag round effect="plain" type="info" class="mobile-pill" @click="emit('openDrawer')">
           <ElIcon :size="14"><Settings /></ElIcon>
