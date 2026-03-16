@@ -69,9 +69,15 @@ const editingNote = ref('');
 const editingTagsPackId = ref<string | null>(null);
 const editingTagsList = ref<string[]>([]);
 const editingClaimsPackId = ref<string | null>(null);
-const editingClaimsValue = ref<number>(1);
+const editingClaimsValue = ref<number>(
+  Number(localStorage.getItem('airdrop_lastClaimsValue')) || 1,
+);
 const editingAutoDeletePackId = ref<string | null>(null);
-const editingAutoDeleteValue = ref<number>(60);
+const editingAutoDeleteValue = ref<number>(
+  Number(localStorage.getItem('airdrop_lastAutoDeleteValue')) || 60,
+);
+const skipClaimsEditorPacks = ref(new Set<string>());
+const skipAutoDeleteEditorPacks = ref(new Set<string>());
 
 // 分组管理 Drawer
 const drawerVisible = ref(false);
@@ -414,6 +420,10 @@ async function handleUpdateProtect(packId: string, value: boolean | null) {
 async function handleUpdateMaxClaims(packId: string, value: number | null) {
   const pack = packs.value.find((p) => p.pack_id === packId);
   if (!pack) return;
+  if (pack.max_claims_per_user && pack.max_claims_per_user > 0) {
+    editingClaimsValue.value = pack.max_claims_per_user;
+    localStorage.setItem('airdrop_lastClaimsValue', String(pack.max_claims_per_user));
+  }
   try {
     const apiValue = value === null ? 'inherit' : String(value);
     await updatePackApi(packId, { max_claims_per_user: apiValue });
@@ -428,11 +438,16 @@ async function handleUpdateMaxClaims(packId: string, value: number | null) {
 }
 
 // ─── 领取限制编辑 ───
-function startEditClaims(pack: AirdropApi.Pack) {
-  editingClaimsPackId.value = pack.pack_id;
-  editingClaimsValue.value = pack.max_claims_per_user && pack.max_claims_per_user > 0 
-    ? pack.max_claims_per_user 
-    : 1;
+function handleStartEditClaims(pack: AirdropApi.Pack) {
+  if (skipClaimsEditorPacks.value.has(pack.pack_id)) {
+    skipClaimsEditorPacks.value.delete(pack.pack_id);
+    handleUpdateMaxClaims(pack.pack_id, null);
+  } else {
+    editingClaimsPackId.value = pack.pack_id;
+    editingClaimsValue.value = pack.max_claims_per_user && pack.max_claims_per_user > 0 
+      ? pack.max_claims_per_user 
+      : (editingClaimsValue.value > 0 ? editingClaimsValue.value : 1);
+  }
 }
 
 async function saveClaimsEdit(pack: AirdropApi.Pack) {
@@ -446,6 +461,7 @@ async function saveClaimsEdit(pack: AirdropApi.Pack) {
   try {
     await updatePackApi(pack.pack_id, { max_claims_per_user: String(value) });
     pack.max_claims_per_user = value;
+    localStorage.setItem('airdrop_lastClaimsValue', String(value));
     ElMessage.success(`已设为每人限制 ${value} 次`);
   } catch (e: any) {
     ElMessage.error(e?.message || '更新失败');
@@ -455,13 +471,21 @@ async function saveClaimsEdit(pack: AirdropApi.Pack) {
 }
 
 function cancelEditClaims() {
+  const packId = editingClaimsPackId.value;
   editingClaimsPackId.value = null;
+  if (packId) {
+    skipClaimsEditorPacks.value.add(packId);
+  }
 }
 
 // ─── 自动删除切换 ───
 async function handleUpdateAutoDelete(packId: string, value: number | null) {
   const pack = packs.value.find((p) => p.pack_id === packId);
   if (!pack) return;
+  if (pack.auto_delete_seconds && pack.auto_delete_seconds > 0) {
+    editingAutoDeleteValue.value = pack.auto_delete_seconds;
+    localStorage.setItem('airdrop_lastAutoDeleteValue', String(pack.auto_delete_seconds));
+  }
   try {
     const apiValue = value === null ? 'inherit' : String(value);
     await updatePackApi(packId, { auto_delete_seconds: apiValue });
@@ -476,11 +500,16 @@ async function handleUpdateAutoDelete(packId: string, value: number | null) {
 }
 
 // ─── 自动删除编辑 ───
-function startEditAutoDelete(pack: AirdropApi.Pack) {
-  editingAutoDeletePackId.value = pack.pack_id;
-  editingAutoDeleteValue.value = pack.auto_delete_seconds && pack.auto_delete_seconds > 0 
-    ? pack.auto_delete_seconds 
-    : 60;
+function handleStartEditAutoDelete(pack: AirdropApi.Pack) {
+  if (skipAutoDeleteEditorPacks.value.has(pack.pack_id)) {
+    skipAutoDeleteEditorPacks.value.delete(pack.pack_id);
+    handleUpdateAutoDelete(pack.pack_id, null);
+  } else {
+    editingAutoDeletePackId.value = pack.pack_id;
+    editingAutoDeleteValue.value = pack.auto_delete_seconds && pack.auto_delete_seconds > 0 
+      ? pack.auto_delete_seconds 
+      : (editingAutoDeleteValue.value > 0 ? editingAutoDeleteValue.value : 60);
+  }
 }
 
 async function saveAutoDeleteEdit(pack: AirdropApi.Pack) {
@@ -494,6 +523,7 @@ async function saveAutoDeleteEdit(pack: AirdropApi.Pack) {
   try {
     await updatePackApi(pack.pack_id, { auto_delete_seconds: String(value) });
     pack.auto_delete_seconds = value;
+    localStorage.setItem('airdrop_lastAutoDeleteValue', String(value));
     ElMessage.success(`已设为 ${value} 秒后自动删除`);
   } catch (e: any) {
     ElMessage.error(e?.message || '更新失败');
@@ -503,7 +533,11 @@ async function saveAutoDeleteEdit(pack: AirdropApi.Pack) {
 }
 
 function cancelEditAutoDelete() {
+  const packId = editingAutoDeletePackId.value;
   editingAutoDeletePackId.value = null;
+  if (packId) {
+    skipAutoDeleteEditorPacks.value.add(packId);
+  }
 }
 
 // ─── 删除（移入回收站） ───
@@ -858,11 +892,11 @@ onUnmounted(() => {
               @update-protect="handleUpdateProtect"
               @update-max-claims="handleUpdateMaxClaims"
               @update-auto-delete="handleUpdateAutoDelete"
-              @start-edit-claims="startEditClaims"
+              @start-edit-claims="handleStartEditClaims"
               @update:editing-claims-value="editingClaimsValue = $event"
               @save-claims-edit="saveClaimsEdit"
               @cancel-edit-claims="cancelEditClaims"
-              @start-edit-auto-delete="startEditAutoDelete"
+              @start-edit-auto-delete="handleStartEditAutoDelete"
               @update:editing-auto-delete-value="editingAutoDeleteValue = $event"
               @save-auto-delete-edit="saveAutoDeleteEdit"
               @cancel-edit-auto-delete="cancelEditAutoDelete"

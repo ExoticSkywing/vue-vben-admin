@@ -3,7 +3,6 @@
  * 空投包管理 — 单个空投包卡片
  */
 import {
-  CheckCheck,
   Copy,
   KeyRound,
   Link,
@@ -285,9 +284,7 @@ function formatDate(dateStr: string | null): string {
               @click="() => claimsInputRef?.focus()"
             />
             <span class="setting-unit">次</span>
-            <ElButton size="small" text type="primary" @click.stop="emit('saveClaimsEdit', pack)">
-              <ElIcon :size="14"><CheckCheck /></ElIcon>
-            </ElButton>
+            <ElButton size="small" text type="success" class="badge-confirm-btn" @click.stop="emit('saveClaimsEdit', pack)">✓</ElButton>
           </span>
         </template>
         <template v-else>
@@ -318,9 +315,7 @@ function formatDate(dateStr: string | null): string {
               @click="() => autoDeleteInputRef?.focus()"
             />
             <span class="setting-unit">秒</span>
-            <ElButton size="small" text type="primary" @click.stop="emit('saveAutoDeleteEdit', pack)">
-              <ElIcon :size="14"><CheckCheck /></ElIcon>
-            </ElButton>
+            <ElButton size="small" text type="success" class="badge-confirm-btn" @click.stop="emit('saveAutoDeleteEdit', pack)">✓</ElButton>
           </span>
         </template>
         <template v-else>
@@ -663,7 +658,7 @@ function formatDate(dateStr: string | null): string {
   -webkit-user-select: auto !important;
 }
 .badge-input {
-  width: 65px;
+  width: 90px;
 }
 .badge-input :deep(.el-input__inner) {
   text-align: center;
@@ -673,6 +668,12 @@ function formatDate(dateStr: string | null): string {
   font-size: 11px;
   color: var(--el-text-color-secondary);
   margin-left: 2px;
+}
+.badge-confirm-btn,
+.badge-cancel-btn {
+  padding: 2px 4px !important;
+  margin-left: 0 !important;
+  min-height: auto !important;
 }
 
 .meta-badge {
