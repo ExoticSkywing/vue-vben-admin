@@ -4,8 +4,6 @@
  */
 import {
   Copy,
-  Hand,
-  Hash,
   KeyRound,
   Link,
   Package,
@@ -15,6 +13,7 @@ import {
   ShieldOff,
   Timer,
   Trash2,
+  UserRoundPen,
   X,
 } from '@vben/icons';
 
@@ -246,7 +245,7 @@ function formatDate(dateStr: string | null): string {
           :class="`claims-badge--${claimsLabel().type}`"
           @click.stop="cycleMaxClaims()"
         >
-          <ElIcon :size="12"><Hand /></ElIcon>
+          <ElIcon :size="12"><UserRoundPen /></ElIcon>
           <span class="claims-badge-text">{{ claimsLabel().text }}</span>
         </span>
         <span
@@ -292,78 +291,76 @@ function formatDate(dateStr: string | null): string {
       </ElTooltip>
     </div>
 
-    <!-- 标签和操作按钮行 -->
-    <div class="pack-card-bottom">
-      <div class="pack-card-tags">
-        <template v-if="editingTagsPackId === pack.pack_id">
-          <ElSelect
-            :model-value="editingTagsList"
-            multiple
-            filterable
-            allow-create
-            default-first-option
-            placeholder="选择或输入标签..."
-            size="small"
-            class="tags-select"
-            @update:model-value="(v: string[]) => emit('update:editingTagsList', v)"
-            @visible-change="(v: boolean) => { if (!v) emit('saveTagsEdit', pack); }"
-          >
-            <ElOption
-              v-for="t in allExistingTags"
-              :key="t"
-              :label="t"
-              :value="t"
-            />
-          </ElSelect>
-        </template>
-        <template v-else>
-          <ElTag
-            v-for="tag in parseTags(pack.tags)"
-            :key="tag"
-            size="small"
-            effect="light"
-            type="primary"
-            round
-            closable
-            class="pack-tag"
-            @close="emit('removeTag', pack, tag)"
-          >
-            {{ tag }}
-          </ElTag>
-          <ElButton
-            size="small"
-            link
-            type="primary"
-            class="add-tag-btn"
-            @click="emit('startEditTags', pack)"
-          >
-            + 添加标签
-          </ElButton>
-        </template>
-      </div>
+    <!-- 标签 -->
+    <div class="pack-card-tags">
+      <template v-if="editingTagsPackId === pack.pack_id">
+        <ElSelect
+          :model-value="editingTagsList"
+          multiple
+          filterable
+          allow-create
+          default-first-option
+          placeholder="选择或输入标签..."
+          size="small"
+          class="tags-select"
+          @update:model-value="(v: string[]) => emit('update:editingTagsList', v)"
+          @visible-change="(v: boolean) => { if (!v) emit('saveTagsEdit', pack); }"
+        >
+          <ElOption
+            v-for="t in allExistingTags"
+            :key="t"
+            :label="t"
+            :value="t"
+          />
+        </ElSelect>
+      </template>
+      <template v-else>
+        <ElTag
+          v-for="tag in parseTags(pack.tags)"
+          :key="tag"
+          size="small"
+          effect="light"
+          type="primary"
+          round
+          closable
+          class="clickable-tag"
+          @click="emit('selectTag', tag)"
+          @close.stop="emit('removeTag', pack, tag)"
+        >
+          <span v-html="highlightText(tag, searchText)" />
+        </ElTag>
+        <ElButton
+          size="small"
+          text
+          :type="pack.tags ? 'info' : 'primary'"
+          @click="emit('startEditTags', pack)"
+        >
+          <ElIcon :size="12"><Plus /></ElIcon>
+          <span v-if="!pack.tags" style="margin-left: 2px">添加标签</span>
+        </ElButton>
+      </template>
+    </div>
 
-      <div class="pack-card-actions">
-        <template v-if="isTrash">
-          <ElButton
-            size="small"
-            type="success"
-            text
-            class="action-btn"
-            :icon="RotateCcw"
-            @click="emit('restorePack', pack.pack_id)"
-          />
-        </template>
-        <template v-else>
-          <ElButton
-            size="small"
-            type="danger"
-            text
-            class="action-btn action-btn--danger"
-            :icon="Trash2"
-            @click="emit('deletePack', pack.pack_id)"
-          />
-        </template>
-      </div>
+    <!-- 删除/恢复按钮 - 右下角 -->
+    <div class="pack-card-action">
+      <template v-if="isTrash">
+        <ElButton
+          size="small"
+          type="success"
+          text
+          :icon="RotateCcw"
+          @click="emit('restorePack', pack.pack_id)"
+        />
+      </template>
+      <template v-else>
+        <ElButton
+          size="small"
+          type="danger"
+          text
+          :icon="Trash2"
+          @click="emit('deletePack', pack.pack_id)"
+        />
+      </template>
     </div>
   </ElCard>
 </template>
@@ -372,6 +369,7 @@ function formatDate(dateStr: string | null): string {
 .pack-card {
   border-radius: 10px;
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  position: relative;
 }
 .pack-card--selected {
   border-color: var(--el-color-primary);
@@ -379,6 +377,12 @@ function formatDate(dateStr: string | null): string {
 }
 .pack-card--trash {
   opacity: 0.75;
+}
+.pack-card-action {
+  position: absolute;
+  bottom: 12px;
+  right: 16px;
+  z-index: 1;
 }
 .pack-checkbox {
   flex-shrink: 0;
@@ -574,41 +578,15 @@ function formatDate(dateStr: string | null): string {
   white-space: nowrap;
 }
 
-/* 卡片底部 (标签 + 操作) */
-.pack-card-bottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 12px;
-  margin-top: 14px;
-}
-
-/* 标签区 */
+/* 卡片标签 */
 .pack-card-tags {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  flex: 1;
+  margin-top: 14px;
+  margin-bottom: 10px;
 }
-.pack-tag {
-  cursor: pointer;
-}
-
-/* 底部操作按钮 */
-.pack-card-actions {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-}
-.action-btn {
-  padding: 4px;
-  height: 24px;
-}
-.action-btn--danger:hover {
-  background-color: var(--el-color-danger-light-9);
-}
-
 .clickable-tag {
   cursor: pointer;
   transition: all 0.15s;

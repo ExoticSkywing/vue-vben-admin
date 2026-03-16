@@ -5,7 +5,7 @@
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
-import { CheckCheck, Hash, RotateCcw, Search, ShieldCheck, ShieldOff, Timer, Trash2 } from '@vben/icons';
+import { CheckCheck, RotateCcw, Search, ShieldCheck, ShieldOff, Timer, Trash2, UserRoundPen } from '@vben/icons';
 
 import {
   ElAlert,
@@ -51,6 +51,7 @@ const identityLoading = ref(true);
 const identity = ref<AirdropApi.IdentityResult | null>(null);
 
 const searchText = ref('');
+const searchFocused = ref(false);
 const packs = ref<AirdropApi.Pack[]>([]);
 const total = ref(0);
 const currentPage = ref(1);
@@ -625,6 +626,9 @@ onUnmounted(() => {
                 size="large"
                 clearable
                 class="search-input"
+                :class="{ 'search-input--focused': searchFocused }"
+                @focus="searchFocused = true"
+                @blur="searchFocused = false"
               >
                 <template #prefix>
                   <ElIcon :size="18"><Search /></ElIcon>
@@ -891,12 +895,11 @@ onUnmounted(() => {
 }
 .search-input {
   flex: 1;
-  max-width: 240px; /* 默认收缩状态的宽度 */
+  max-width: 420px;
   transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.search-input:focus-within,
-.search-input.is-focus {
-  max-width: 560px; /* 聚焦时延展的宽度 */
+.search-input--focused {
+  max-width: 640px;
 }
 .search-count {
   font-size: 13px;
@@ -953,17 +956,10 @@ onUnmounted(() => {
   .toolbar {
     flex-direction: column;
     gap: 10px;
-    align-items: stretch;
   }
   .toolbar-actions {
     width: 100%;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-  .global-settings-group {
-    flex-wrap: wrap;
-    justify-content: flex-start;
+    justify-content: space-between;
   }
   .search-bar {
     flex-direction: column;
@@ -971,13 +967,11 @@ onUnmounted(() => {
     gap: 8px;
     width: 100%;
   }
-  .search-input,
-  .search-input.is-focus,
-  .search-input:focus-within {
-    max-width: 100%; /* 移动端占满全宽 */
+  .search-input {
+    max-width: none;
   }
   .search-count {
-    text-align: left;
+    text-align: right;
   }
   .batch-bar {
     flex-direction: column;
