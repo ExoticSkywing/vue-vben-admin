@@ -393,7 +393,10 @@ async function handleBatchPurge() {
        <label style="display:flex;align-items:center;gap:6px;margin-top:12px;cursor:pointer">
          <input type="checkbox" id="purge-clean-channel" />
          同时清理 TG 频道中的文件消息
-       </label>`,
+       </label>
+       <p style="margin:8px 0 0 22px;font-size:12px;color:#e6a23c;line-height:1.5">
+         ⚠️ 仅支持删除 <b>48 小时内</b>创建的空投包的频道消息（Telegram API 限制）
+       </p>`,
       '彻底删除',
       {
         confirmButtonText: '彻底删除',
