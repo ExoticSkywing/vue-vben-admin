@@ -891,7 +891,11 @@ onUnmounted(() => {
 }
 .search-input {
   flex: 1;
-  max-width: 560px;
+  max-width: 240px; /* 默认收缩状态的宽度 */
+  transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.search-input:focus-within {
+  max-width: 560px; /* 聚焦时延展的宽度 */
 }
 .search-count {
   font-size: 13px;
