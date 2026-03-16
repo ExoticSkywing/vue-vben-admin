@@ -633,22 +633,9 @@ onUnmounted(() => {
             <span class="search-count">共 {{ total }} 个</span>
           </div>
 
-          <!-- 工具栏：全局设置（左） + 视图切换/批量（右） -->
+          <!-- 工具栏：领取/删除设置（左） + 操作按钮/保护（右） -->
           <div class="toolbar">
             <div class="global-settings-group">
-                <div class="global-setting-item">
-                  <ElIcon :size="14" :class="globalProtect ? 'protect-on' : 'protect-off'">
-                    <ShieldCheck v-if="globalProtect" />
-                    <ShieldOff v-else />
-                  </ElIcon>
-                  <span class="setting-label">内容保护</span>
-                  <ElSwitch
-                    :model-value="globalProtect"
-                    :loading="settingsLoading"
-                    size="small"
-                    @update:model-value="(v: boolean) => toggleGlobalProtect(v)"
-                  />
-                </div>
                 <div class="global-setting-item">
                   <ElIcon :size="14" class="setting-icon"><UserRoundPen /></ElIcon>
                   <span class="setting-label">领取限制</span>
@@ -702,6 +689,20 @@ onUnmounted(() => {
                 <ElIcon :size="14" style="margin-right: 4px"><CheckCheck /></ElIcon>
                 {{ batchMode ? '退出批量' : '批量操作' }}
               </ElButton>
+
+              <div class="global-setting-item">
+                <ElIcon :size="14" :class="globalProtect ? 'protect-on' : 'protect-off'">
+                  <ShieldCheck v-if="globalProtect" />
+                  <ShieldOff v-else />
+                </ElIcon>
+                <span class="setting-label">内容保护</span>
+                <ElSwitch
+                  :model-value="globalProtect"
+                  :loading="settingsLoading"
+                  size="small"
+                  @update:model-value="(v: boolean) => toggleGlobalProtect(v)"
+                />
+              </div>
             </div>
           </div>
 
@@ -963,30 +964,22 @@ onUnmounted(() => {
   .toolbar-actions {
     width: 100%;
     flex-wrap: wrap;
-    justify-content: flex-start;
+    gap: 8px;
   }
   .global-settings-group {
     width: 100%;
-    gap: 6px;
+    gap: 8px;
   }
   .global-setting-item {
-    padding: 5px 8px;
-  }
-  .global-setting-item:first-child {
-    flex: 0 0 auto;
-  }
-  .global-setting-item:first-child .setting-label {
-    display: none;
-  }
-  .global-setting-item:not(:first-child) {
     flex: 1;
     min-width: 0;
+    padding: 5px 8px;
   }
   .setting-label {
     font-size: 11px;
   }
   .global-number-input {
-    width: 65px;
+    width: 70px;
   }
   .setting-unit {
     font-size: 10px;
