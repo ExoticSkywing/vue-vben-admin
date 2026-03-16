@@ -12,9 +12,15 @@ export namespace AirdropApi {
     tags: string | null;
     created_at: string | null;
     updated_at: string | null;
+    deleted_at: string | null;
     share_link: string;
     auto_code: string | null;
     codes: PackCode[];
+  }
+
+  export interface BatchResult {
+    affected: number;
+    channel_deleted?: number;
   }
 
   export interface PackCode {
@@ -67,13 +73,14 @@ export async function checkIdentityApi() {
   return requestClient.get<AirdropApi.IdentityResult>('/airdrop/identity');
 }
 
-/** 列出空投包（支持搜索/分页/标签筛选/分组筛选） */
+/** 列出空投包（支持搜索/分页/标签筛选/分组筛选/回收站） */
 export async function listPacksApi(params: {
   search?: string;
   tag?: string;
   group_id?: number;
   page?: number;
   page_size?: number;
+  deleted?: boolean;
 }) {
   return requestClient.get<AirdropApi.PackListResult>('/airdrop/packs', {
     params,
@@ -93,9 +100,36 @@ export async function updatePackApi(
   return requestClient.put(`/airdrop/packs/${packId}`, data);
 }
 
-/** 删除空投包 */
+/** 删除空投包（移入回收站） */
 export async function deletePackApi(packId: string) {
   return requestClient.delete(`/airdrop/packs/${packId}`);
+}
+
+/** 批量删除（移入回收站） */
+export async function batchDeletePacksApi(packIds: string[]) {
+  return requestClient.post<AirdropApi.BatchResult>(
+    '/airdrop/packs/batch-delete',
+    { pack_ids: packIds },
+  );
+}
+
+/** 批量恢复（从回收站移出） */
+export async function batchRestorePacksApi(packIds: string[]) {
+  return requestClient.post<AirdropApi.BatchResult>(
+    '/airdrop/packs/batch-restore',
+    { pack_ids: packIds },
+  );
+}
+
+/** 彻底删除（物理删除，可选清理频道消息） */
+export async function batchPurgePacksApi(
+  packIds: string[],
+  cleanChannel: boolean = false,
+) {
+  return requestClient.post<AirdropApi.BatchResult>(
+    '/airdrop/packs/batch-purge',
+    { pack_ids: packIds, clean_channel: cleanChannel },
+  );
 }
 
 /** 生成分享链接 */

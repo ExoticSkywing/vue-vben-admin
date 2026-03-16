@@ -5,19 +5,26 @@
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
-import { Search } from '@vben/icons';
+import { CheckCheck, RotateCcw, Search, Trash2 } from '@vben/icons';
 
 import {
   ElAlert,
+  ElButton,
+  ElCheckbox,
   ElEmpty,
   ElIcon,
   ElInput,
   ElMessage,
   ElMessageBox,
   ElPagination,
+  ElRadioButton,
+  ElRadioGroup,
 } from 'element-plus';
 
 import {
+  batchDeletePacksApi,
+  batchPurgePacksApi,
+  batchRestorePacksApi,
   checkIdentityApi,
   deletePackApi,
   getTagsApi,
@@ -58,6 +65,14 @@ const editingTagsList = ref<string[]>([]);
 
 // 分组管理 Drawer
 const drawerVisible = ref(false);
+
+// 回收站模式
+const viewMode = ref<'normal' | 'trash'>('normal');
+const isTrashView = computed(() => viewMode.value === 'trash');
+
+// 批量选择
+const batchMode = ref(false);
+const selectedPacks = ref<Set<string>>(new Set());
 
 // 响应式
 const isMobile = ref(false);
@@ -121,9 +136,12 @@ async function loadPacks() {
       search: searchText.value,
       page: currentPage.value,
       page_size: pageSize.value,
+      deleted: isTrashView.value,
     };
-    if (activeTag.value) params.tag = activeTag.value;
-    else if (activeGroupId.value > 0) params.group_id = activeGroupId.value;
+    if (!isTrashView.value) {
+      if (activeTag.value) params.tag = activeTag.value;
+      else if (activeGroupId.value > 0) params.group_id = activeGroupId.value;
+    }
     const result = await listPacksApi(params);
     packs.value = result.items;
     total.value = result.total;
@@ -133,6 +151,48 @@ async function loadPacks() {
     loading.value = false;
   }
 }
+
+// ─── 视图切换 ───
+function switchView(mode: 'normal' | 'trash') {
+  viewMode.value = mode;
+  currentPage.value = 1;
+  searchText.value = '';
+  exitBatchMode();
+  loadPacks();
+}
+
+// ─── 批量选择 ───
+function toggleBatchMode() {
+  batchMode.value = !batchMode.value;
+  if (!batchMode.value) {
+    selectedPacks.value.clear();
+  }
+}
+
+function exitBatchMode() {
+  batchMode.value = false;
+  selectedPacks.value.clear();
+}
+
+function toggleSelect(packId: string) {
+  const s = new Set(selectedPacks.value);
+  if (s.has(packId)) s.delete(packId);
+  else s.add(packId);
+  selectedPacks.value = s;
+}
+
+function toggleSelectAll() {
+  if (selectedPacks.value.size === packs.value.length) {
+    selectedPacks.value = new Set();
+  } else {
+    selectedPacks.value = new Set(packs.value.map((p) => p.pack_id));
+  }
+}
+
+const isAllSelected = computed(
+  () => packs.value.length > 0 && selectedPacks.value.size === packs.value.length,
+);
+const selectedCount = computed(() => selectedPacks.value.size);
 
 // ─── 搜索 ───
 watch(searchText, () => {
@@ -263,21 +323,98 @@ async function handleRemoveTag(pack: AirdropApi.Pack, tagToRemove: string) {
   }
 }
 
-// ─── 删除 ───
+// ─── 删除（移入回收站） ───
 async function handleDelete(packId: string) {
   try {
-    await ElMessageBox.confirm('确认删除此空投包？', '提示', {
-      confirmButtonText: '删除',
+    await ElMessageBox.confirm('确认将此空投包移入回收站？', '提示', {
+      confirmButtonText: '移入回收站',
       cancelButtonText: '取消',
       type: 'warning',
     });
     await deletePackApi(packId);
-    ElMessage.success('删除成功');
+    ElMessage.success('已移入回收站');
     await Promise.all([loadPacks(), loadTags()]);
   } catch (e: any) {
     if (e !== 'cancel') {
-      ElMessage.error(e?.message || '删除失败');
+      ElMessage.error(e?.message || '操作失败');
     }
+  }
+}
+
+// ─── 恢复（从回收站移出） ───
+async function handleRestore(packId: string) {
+  try {
+    await batchRestorePacksApi([packId]);
+    ElMessage.success('已恢复');
+    await loadPacks();
+  } catch (e: any) {
+    ElMessage.error(e?.message || '恢复失败');
+  }
+}
+
+// ─── 批量操作 ───
+async function handleBatchDelete() {
+  const ids = [...selectedPacks.value];
+  if (!ids.length) return;
+  try {
+    await ElMessageBox.confirm(
+      `确认将选中的 ${ids.length} 个空投包移入回收站？`,
+      '批量删除',
+      { confirmButtonText: '移入回收站', cancelButtonText: '取消', type: 'warning' },
+    );
+    const result = await batchDeletePacksApi(ids);
+    ElMessage.success(`已移入回收站 ${result.affected} 个`);
+    exitBatchMode();
+    await Promise.all([loadPacks(), loadTags()]);
+  } catch (e: any) {
+    if (e !== 'cancel') ElMessage.error(e?.message || '操作失败');
+  }
+}
+
+async function handleBatchRestore() {
+  const ids = [...selectedPacks.value];
+  if (!ids.length) return;
+  try {
+    const result = await batchRestorePacksApi(ids);
+    ElMessage.success(`已恢复 ${result.affected} 个`);
+    exitBatchMode();
+    await loadPacks();
+  } catch (e: any) {
+    ElMessage.error(e?.message || '恢复失败');
+  }
+}
+
+async function handleBatchPurge() {
+  const ids = [...selectedPacks.value];
+  if (!ids.length) return;
+  try {
+    const { value: cleanChannel } = await ElMessageBox.confirm(
+      `<p>确认<b>彻底删除</b>选中的 <b>${ids.length}</b> 个空投包？此操作不可恢复。</p>
+       <label style="display:flex;align-items:center;gap:6px;margin-top:12px;cursor:pointer">
+         <input type="checkbox" id="purge-clean-channel" />
+         同时清理 TG 频道中的文件消息
+       </label>`,
+      '彻底删除',
+      {
+        confirmButtonText: '彻底删除',
+        cancelButtonText: '取消',
+        type: 'error',
+        dangerouslyUseHTMLString: true,
+        confirmButtonClass: 'el-button--danger',
+      },
+    );
+    const checkbox = document.getElementById('purge-clean-channel') as HTMLInputElement | null;
+    const clean = checkbox?.checked ?? false;
+    const result = await batchPurgePacksApi(ids, clean);
+    let msg = `已彻底删除 ${result.affected} 个`;
+    if (result.channel_deleted && result.channel_deleted > 0) {
+      msg += `，已清理 ${result.channel_deleted} 条频道消息`;
+    }
+    ElMessage.success(msg);
+    exitBatchMode();
+    await loadPacks();
+  } catch (e: any) {
+    if (e !== 'cancel') ElMessage.error(e?.message || '操作失败');
   }
 }
 
@@ -358,24 +495,96 @@ onUnmounted(() => {
 
         <!-- 主内容区 -->
         <main class="airdrop-main">
-          <div class="search-bar">
-            <ElInput
-              v-model="searchText"
-              :placeholder="searchPlaceholder"
-              size="large"
-              clearable
-              class="search-input"
+          <!-- 顶部工具栏：搜索 + 视图切换 + 批量按钮 -->
+          <div class="toolbar">
+            <div class="search-bar">
+              <ElInput
+                v-model="searchText"
+                :placeholder="searchPlaceholder"
+                size="large"
+                clearable
+                class="search-input"
+              >
+                <template #prefix>
+                  <ElIcon :size="18"><Search /></ElIcon>
+                </template>
+              </ElInput>
+              <span class="search-count">共 {{ total }} 个</span>
+            </div>
+
+            <div class="toolbar-actions">
+              <ElRadioGroup
+                :model-value="viewMode"
+                size="small"
+                @update:model-value="(v: string) => switchView(v as 'normal' | 'trash')"
+              >
+                <ElRadioButton value="normal">空投包</ElRadioButton>
+                <ElRadioButton value="trash">
+                  <ElIcon :size="13" style="margin-right: 3px; vertical-align: -1px"><Trash2 /></ElIcon>
+                  回收站
+                </ElRadioButton>
+              </ElRadioGroup>
+
+              <ElButton
+                size="small"
+                :type="batchMode ? 'primary' : 'default'"
+                plain
+                @click="toggleBatchMode"
+              >
+                <ElIcon :size="14" style="margin-right: 4px"><CheckCheck /></ElIcon>
+                {{ batchMode ? '退出批量' : '批量操作' }}
+              </ElButton>
+            </div>
+          </div>
+
+          <!-- 批量操作栏 -->
+          <div v-if="batchMode" class="batch-bar">
+            <ElCheckbox
+              :model-value="isAllSelected"
+              :indeterminate="selectedCount > 0 && !isAllSelected"
+              @update:model-value="toggleSelectAll"
             >
-              <template #prefix>
-                <ElIcon :size="18"><Search /></ElIcon>
+              全选 ({{ selectedCount }}/{{ packs.length }})
+            </ElCheckbox>
+
+            <div class="batch-actions">
+              <template v-if="isTrashView">
+                <ElButton
+                  size="small"
+                  type="success"
+                  :disabled="selectedCount === 0"
+                  @click="handleBatchRestore"
+                >
+                  <ElIcon :size="14" style="margin-right: 4px"><RotateCcw /></ElIcon>
+                  批量恢复
+                </ElButton>
+                <ElButton
+                  size="small"
+                  type="danger"
+                  :disabled="selectedCount === 0"
+                  @click="handleBatchPurge"
+                >
+                  <ElIcon :size="14" style="margin-right: 4px"><Trash2 /></ElIcon>
+                  彻底删除
+                </ElButton>
               </template>
-            </ElInput>
-            <span class="search-count">共 {{ total }} 个</span>
+              <template v-else>
+                <ElButton
+                  size="small"
+                  type="danger"
+                  :disabled="selectedCount === 0"
+                  @click="handleBatchDelete"
+                >
+                  <ElIcon :size="14" style="margin-right: 4px"><Trash2 /></ElIcon>
+                  批量删除
+                </ElButton>
+              </template>
+            </div>
           </div>
 
           <div v-loading="loading" class="pack-grid">
             <div v-if="packs.length === 0 && !loading" style="padding: 60px 0; grid-column: 1 / -1">
-              <ElEmpty description="暂无空投包" />
+              <ElEmpty :description="isTrashView ? '回收站为空' : '暂无空投包'" />
             </div>
 
             <AirdropPackCard
@@ -388,6 +597,9 @@ onUnmounted(() => {
               :editing-tags-pack-id="editingTagsPackId"
               :editing-tags-list="editingTagsList"
               :all-existing-tags="allExistingTags"
+              :batch-mode="batchMode"
+              :selected="selectedPacks.has(pack.pack_id)"
+              :is-trash="isTrashView"
               @start-edit-note="startEditNote"
               @update:editing-note="editingNote = $event"
               @save-note="saveNote"
@@ -399,6 +611,8 @@ onUnmounted(() => {
               @remove-tag="handleRemoveTag"
               @copy-to-clipboard="copyToClipboard"
               @delete-pack="handleDelete"
+              @restore-pack="handleRestore"
+              @toggle-select="toggleSelect"
             />
           </div>
 
@@ -447,11 +661,27 @@ onUnmounted(() => {
   min-width: 0;
   background-color: var(--el-bg-color-page);
 }
+/* 工具栏 */
+.toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
 .search-bar {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 20px;
+  flex: 1;
+  min-width: 0;
 }
 .search-input {
   flex: 1;
@@ -461,6 +691,23 @@ onUnmounted(() => {
   font-size: 13px;
   color: var(--el-text-color-secondary);
   white-space: nowrap;
+}
+
+/* 批量操作栏 */
+.batch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  background-color: var(--el-fill-color-light);
+  border-radius: 8px;
+  border: 1px solid var(--el-border-color-lighter);
+}
+.batch-actions {
+  display: flex;
+  gap: 8px;
 }
 
 /* 卡片网格 */
@@ -492,16 +739,30 @@ onUnmounted(() => {
   .airdrop-main {
     padding: 16px 12px;
   }
+  .toolbar {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .toolbar-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
   .search-bar {
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
+    width: 100%;
   }
   .search-input {
     max-width: none;
   }
   .search-count {
     text-align: right;
+  }
+  .batch-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
   .pack-grid {
     gap: 10px;

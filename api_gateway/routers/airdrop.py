@@ -137,6 +137,11 @@ class TagGroupMembersRequest(BaseModel):
     tags: List[str]
 
 
+class BatchPacksRequest(BaseModel):
+    pack_ids: List[str]
+    clean_channel: bool = False
+
+
 # ═══════════════════════════════════════════════════
 # API 路由 — 全部转发到空投机内部 API
 # ═══════════════════════════════════════════════════
@@ -149,8 +154,9 @@ async def list_packs(
     group_id: int = Query(0, description="筛选标签分组 ID"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    deleted: bool = Query(False, description="是否查看回收站"),
 ):
-    """列出空投包（支持搜索/分页/标签筛选/分组筛选），核心检索接口"""
+    """列出空投包（支持搜索/分页/标签筛选/分组筛选/回收站）"""
     user = _get_current_user(request)
     tg_uid = _require_tg_uid(user)
 
@@ -162,6 +168,7 @@ async def list_packs(
         "group_id": group_id,
         "page": page,
         "page_size": page_size,
+        "deleted": deleted,
     })
 
 
@@ -193,13 +200,55 @@ async def update_pack(request: Request, pack_id: str, body: PackUpdateRequest):
 
 @router.delete("/packs/{pack_id}")
 async def delete_pack(request: Request, pack_id: str):
-    """删除空投包"""
+    """删除空投包（移入回收站）"""
     user = _get_current_user(request)
     tg_uid = _require_tg_uid(user)
 
     return await _call_airdrop("DELETE", f"/api/packs/{pack_id}", tg_uid, params={
         "tg_uid": tg_uid,
         "is_super": user["is_super"],
+    })
+
+
+# ─── 批量操作 ───
+
+@router.post("/packs/batch-delete")
+async def batch_delete(request: Request, body: BatchPacksRequest):
+    """批量删除（移入回收站）"""
+    user = _get_current_user(request)
+    tg_uid = _require_tg_uid(user)
+
+    return await _call_airdrop("POST", "/api/packs/batch-delete", tg_uid, json_body={
+        "tg_uid": tg_uid,
+        "is_super": user["is_super"],
+        "pack_ids": body.pack_ids,
+    })
+
+
+@router.post("/packs/batch-restore")
+async def batch_restore(request: Request, body: BatchPacksRequest):
+    """批量恢复（从回收站移出）"""
+    user = _get_current_user(request)
+    tg_uid = _require_tg_uid(user)
+
+    return await _call_airdrop("POST", "/api/packs/batch-restore", tg_uid, json_body={
+        "tg_uid": tg_uid,
+        "is_super": user["is_super"],
+        "pack_ids": body.pack_ids,
+    })
+
+
+@router.post("/packs/batch-purge")
+async def batch_purge(request: Request, body: BatchPacksRequest):
+    """彻底删除（物理删除，可选清理频道消息）"""
+    user = _get_current_user(request)
+    tg_uid = _require_tg_uid(user)
+
+    return await _call_airdrop("POST", "/api/packs/batch-purge", tg_uid, json_body={
+        "tg_uid": tg_uid,
+        "is_super": user["is_super"],
+        "pack_ids": body.pack_ids,
+        "clean_channel": body.clean_channel,
     })
 
 

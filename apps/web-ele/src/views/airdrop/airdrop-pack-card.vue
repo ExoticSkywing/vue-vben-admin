@@ -8,6 +8,7 @@ import {
   Link,
   Package,
   Plus,
+  RotateCcw,
   Trash2,
   X,
 } from '@vben/icons';
@@ -15,6 +16,7 @@ import {
 import {
   ElButton,
   ElCard,
+  ElCheckbox,
   ElIcon,
   ElInput,
   ElOption,
@@ -33,6 +35,9 @@ const props = defineProps<{
   editingTagsPackId: string | null;
   editingTagsList: string[];
   allExistingTags: string[];
+  batchMode: boolean;
+  selected: boolean;
+  isTrash: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -47,6 +52,8 @@ const emit = defineEmits<{
   removeTag: [pack: AirdropApi.Pack, tag: string];
   copyToClipboard: [text: string, label: string];
   deletePack: [packId: string];
+  restorePack: [packId: string];
+  toggleSelect: [packId: string];
 }>();
 
 function parseTags(tags: string | null): string[] {
@@ -79,10 +86,19 @@ function formatDate(dateStr: string | null): string {
   <ElCard
     shadow="hover"
     class="pack-card"
+    :class="{ 'pack-card--selected': selected, 'pack-card--trash': isTrash }"
     :body-style="{ padding: '16px 20px' }"
+    @click="batchMode ? emit('toggleSelect', pack.pack_id) : undefined"
   >
     <!-- 顶部：备注 + 操作 -->
     <div class="pack-card-header">
+      <ElCheckbox
+        v-if="batchMode"
+        :model-value="selected"
+        class="pack-checkbox"
+        @update:model-value="emit('toggleSelect', pack.pack_id)"
+        @click.stop
+      />
       <div class="pack-card-title">
         <ElIcon :size="18" class="pack-card-icon"><Package /></ElIcon>
         <template v-if="editingNotePackId === pack.pack_id">
@@ -114,13 +130,24 @@ function formatDate(dateStr: string | null): string {
       <div class="pack-card-meta">
         <span class="meta-badge">{{ pack.item_count }} 项</span>
         <span class="meta-date">{{ formatDate(pack.created_at) }}</span>
-        <ElButton
-          size="small"
-          type="danger"
-          text
-          :icon="Trash2"
-          @click="emit('deletePack', pack.pack_id)"
-        />
+        <template v-if="isTrash">
+          <ElButton
+            size="small"
+            type="success"
+            text
+            :icon="RotateCcw"
+            @click="emit('restorePack', pack.pack_id)"
+          />
+        </template>
+        <template v-else>
+          <ElButton
+            size="small"
+            type="danger"
+            text
+            :icon="Trash2"
+            @click="emit('deletePack', pack.pack_id)"
+          />
+        </template>
       </div>
     </div>
 
@@ -209,7 +236,18 @@ function formatDate(dateStr: string | null): string {
 <style scoped>
 .pack-card {
   border-radius: 10px;
-  transition: box-shadow 0.2s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.pack-card--selected {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 1px var(--el-color-primary-light-5);
+}
+.pack-card--trash {
+  opacity: 0.75;
+}
+.pack-checkbox {
+  flex-shrink: 0;
+  margin-right: 4px;
 }
 
 /* 卡片头部 */
