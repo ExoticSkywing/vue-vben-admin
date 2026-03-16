@@ -894,15 +894,14 @@ onUnmounted(() => {
   min-width: 0;
 }
 .search-input {
-  flex: 1;
-  max-width: 420px;
-  transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  max-width: 320px;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .search-input--focused {
-  max-width: 640px;
+  max-width: 600px;
 }
 .search-input :deep(.el-input__wrapper) {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .search-count {
   font-size: 13px;
