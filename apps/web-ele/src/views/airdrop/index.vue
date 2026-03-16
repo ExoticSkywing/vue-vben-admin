@@ -5,7 +5,7 @@
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
-import { CheckCheck, RotateCcw, Search, Trash2 } from '@vben/icons';
+import { CheckCheck, RotateCcw, Search, ShieldCheck, ShieldOff, Trash2 } from '@vben/icons';
 
 import {
   ElAlert,
@@ -19,6 +19,8 @@ import {
   ElPagination,
   ElRadioButton,
   ElRadioGroup,
+  ElSwitch,
+  ElTooltip,
 } from 'element-plus';
 
 import {
@@ -27,9 +29,11 @@ import {
   batchRestorePacksApi,
   checkIdentityApi,
   deletePackApi,
+  getSettingsApi,
   getTagsApi,
   listPacksApi,
   updatePackApi,
+  updateSettingsApi,
 } from '#/api/airdrop';
 import type { AirdropApi } from '#/api/airdrop';
 
@@ -65,6 +69,10 @@ const editingTagsList = ref<string[]>([]);
 
 // 分组管理 Drawer
 const drawerVisible = ref(false);
+
+// 全局设置
+const globalProtect = ref(true);
+const settingsLoading = ref(false);
 
 // 回收站模式
 const viewMode = ref<'normal' | 'trash'>('normal');
@@ -115,6 +123,30 @@ async function checkIdentity() {
     identity.value = null;
   } finally {
     identityLoading.value = false;
+  }
+}
+
+// ─── 全局设置 ───
+async function loadSettings() {
+  try {
+    const result = await getSettingsApi();
+    globalProtect.value = result.protect_content;
+  } catch {
+    globalProtect.value = true;
+  }
+}
+
+async function toggleGlobalProtect(val: boolean) {
+  settingsLoading.value = true;
+  try {
+    await updateSettingsApi({ protect_content: val });
+    globalProtect.value = val;
+    ElMessage.success(val ? '全局内容保护已开启' : '全局内容保护已关闭');
+  } catch (e: any) {
+    ElMessage.error(e?.message || '设置失败');
+    globalProtect.value = !val;
+  } finally {
+    settingsLoading.value = false;
   }
 }
 
@@ -323,6 +355,23 @@ async function handleRemoveTag(pack: AirdropApi.Pack, tagToRemove: string) {
   }
 }
 
+// ─── 内容保护切换 ───
+async function handleUpdateProtect(packId: string, value: boolean | null) {
+  const pack = packs.value.find((p) => p.pack_id === packId);
+  if (!pack) return;
+  try {
+    const apiValue = value === null ? 'inherit' : value ? 'true' : 'false';
+    await updatePackApi(packId, { protect_content: apiValue });
+    pack.protect_content = value;
+    const label = value === null
+      ? '已恢复继承全局设置'
+      : value ? '已开启内容保护' : '已关闭内容保护';
+    ElMessage.success(label);
+  } catch (e: any) {
+    ElMessage.error(e?.message || '设置失败');
+  }
+}
+
 // ─── 删除（移入回收站） ───
 async function handleDelete(packId: string) {
   try {
@@ -442,7 +491,7 @@ onMounted(async () => {
   window.addEventListener('keydown', handleKeydown);
   await checkIdentity();
   if (isBound.value) {
-    await Promise.all([loadPacks(), loadTags()]);
+    await Promise.all([loadPacks(), loadTags(), loadSettings()]);
   }
 });
 
@@ -539,6 +588,24 @@ onUnmounted(() => {
                 <ElIcon :size="14" style="margin-right: 4px"><CheckCheck /></ElIcon>
                 {{ batchMode ? '退出批量' : '批量操作' }}
               </ElButton>
+
+              <ElTooltip
+                :content="globalProtect ? '全局内容保护：已开启' : '全局内容保护：已关闭'"
+                placement="bottom"
+              >
+                <div class="global-protect-switch">
+                  <ElIcon :size="15" :class="globalProtect ? 'protect-on' : 'protect-off'">
+                    <ShieldCheck v-if="globalProtect" />
+                    <ShieldOff v-else />
+                  </ElIcon>
+                  <ElSwitch
+                    :model-value="globalProtect"
+                    :loading="settingsLoading"
+                    size="small"
+                    @update:model-value="(v: boolean) => toggleGlobalProtect(v)"
+                  />
+                </div>
+              </ElTooltip>
             </div>
           </div>
 
@@ -605,6 +672,7 @@ onUnmounted(() => {
               :batch-mode="batchMode"
               :selected="selectedPacks.has(pack.pack_id)"
               :is-trash="isTrashView"
+              :global-protect="globalProtect"
               @start-edit-note="startEditNote"
               @update:editing-note="editingNote = $event"
               @save-note="saveNote"
@@ -618,6 +686,7 @@ onUnmounted(() => {
               @delete-pack="handleDelete"
               @restore-pack="handleRestore"
               @toggle-select="toggleSelect"
+              @update-protect="handleUpdateProtect"
             />
           </div>
 
@@ -680,6 +749,18 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+}
+.global-protect-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+}
+.protect-on {
+  color: var(--el-color-success);
+}
+.protect-off {
+  color: var(--el-text-color-disabled);
 }
 .search-bar {
   display: flex;

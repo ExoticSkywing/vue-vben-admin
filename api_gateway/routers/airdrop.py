@@ -112,6 +112,11 @@ def _require_tg_uid(user: dict) -> int:
 class PackUpdateRequest(BaseModel):
     name: Optional[str] = None
     tags: Optional[str] = None
+    protect_content: Optional[str] = None  # "true" | "false" | "inherit"
+
+
+class SettingsUpdateRequest(BaseModel):
+    protect_content: Optional[bool] = None
 
 
 class CodeCreateRequest(BaseModel):
@@ -195,6 +200,7 @@ async def update_pack(request: Request, pack_id: str, body: PackUpdateRequest):
         "is_super": user["is_super"],
         "name": body.name,
         "tags": body.tags,
+        "protect_content": body.protect_content,
     })
 
 
@@ -353,6 +359,32 @@ async def set_group_members(request: Request, group_id: int, body: TagGroupMembe
     return await _call_airdrop("PUT", f"/api/tag-groups/{group_id}/members", tg_uid, json_body={
         "tg_uid": tg_uid,
         "tags": body.tags,
+    })
+
+
+# ─── 全局设置 ───
+
+@router.get("/settings")
+async def get_settings(request: Request):
+    """获取全局设置"""
+    user = _get_current_user(request)
+    tg_uid = _require_tg_uid(user)
+
+    return await _call_airdrop("GET", "/api/settings", tg_uid, params={
+        "tg_uid": tg_uid,
+    })
+
+
+@router.put("/settings")
+async def update_settings(request: Request, body: SettingsUpdateRequest):
+    """更新全局设置（仅超级管理员）"""
+    user = _get_current_user(request)
+    tg_uid = _require_tg_uid(user)
+
+    return await _call_airdrop("PUT", "/api/settings", tg_uid, json_body={
+        "tg_uid": tg_uid,
+        "is_super": user["is_super"],
+        "protect_content": body.protect_content,
     })
 
 

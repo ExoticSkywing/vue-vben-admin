@@ -9,6 +9,8 @@ import {
   Package,
   Plus,
   RotateCcw,
+  ShieldCheck,
+  ShieldOff,
   Trash2,
   X,
 } from '@vben/icons';
@@ -38,6 +40,7 @@ const props = defineProps<{
   batchMode: boolean;
   selected: boolean;
   isTrash: boolean;
+  globalProtect: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -54,6 +57,7 @@ const emit = defineEmits<{
   deletePack: [packId: string];
   restorePack: [packId: string];
   toggleSelect: [packId: string];
+  updateProtect: [packId: string, value: boolean | null];
 }>();
 
 function parseTags(tags: string | null): string[] {
@@ -69,6 +73,36 @@ function highlightText(text: string | null, keyword: string): string {
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(`(${escaped})`, 'gi');
   return text.replace(regex, '<mark class="bg-yellow-200 px-0.5 rounded">$1</mark>');
+}
+
+// 内容保护三态循环：null(继承) -> true(强制保护) -> false(强制不保护) -> null
+function cycleProtect() {
+  const current = props.pack.protect_content;
+  let next: boolean | null;
+  if (current === null || current === undefined) {
+    next = true;
+  } else if (current === true) {
+    next = false;
+  } else {
+    next = null;
+  }
+  emit('updateProtect', props.pack.pack_id, next);
+}
+
+// 获取最终生效的保护状态
+function effectiveProtect(): boolean {
+  if (props.pack.protect_content !== null && props.pack.protect_content !== undefined) {
+    return props.pack.protect_content;
+  }
+  return props.globalProtect;
+}
+
+function protectTooltip(): string {
+  const pc = props.pack.protect_content;
+  if (pc === null || pc === undefined) {
+    return `继承全局（${props.globalProtect ? '受保护' : '不保护'}）\n点击切换`;
+  }
+  return pc ? '强制保护\n点击切换' : '强制不保护\n点击切换';
 }
 
 function formatDate(dateStr: string | null): string {
@@ -128,6 +162,22 @@ function formatDate(dateStr: string | null): string {
         </template>
       </div>
       <div class="pack-card-meta">
+        <ElTooltip :content="protectTooltip()" placement="top" :show-after="300">
+          <span
+            class="protect-indicator"
+            :class="{
+              'protect-indicator--on': effectiveProtect(),
+              'protect-indicator--off': !effectiveProtect(),
+              'protect-indicator--inherited': pack.protect_content === null || pack.protect_content === undefined,
+            }"
+            @click.stop="cycleProtect()"
+          >
+            <ElIcon :size="14">
+              <ShieldCheck v-if="effectiveProtect()" />
+              <ShieldOff v-else />
+            </ElIcon>
+          </span>
+        </ElTooltip>
         <span class="meta-badge">{{ pack.item_count }} 项</span>
         <span class="meta-date">{{ formatDate(pack.created_at) }}</span>
         <template v-if="isTrash">
@@ -309,6 +359,31 @@ function formatDate(dateStr: string | null): string {
   gap: 8px;
   flex-shrink: 0;
 }
+/* 内容保护指示器 */
+.protect-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.protect-indicator:hover {
+  background-color: var(--el-fill-color-light);
+  transform: scale(1.1);
+}
+.protect-indicator--on {
+  color: var(--el-color-success);
+}
+.protect-indicator--off {
+  color: var(--el-text-color-disabled);
+}
+.protect-indicator--inherited {
+  opacity: 0.6;
+}
+
 .meta-badge {
   font-size: 12px;
   color: var(--el-text-color-secondary);

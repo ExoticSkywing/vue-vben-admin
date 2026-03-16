@@ -65,6 +65,8 @@ export {
   RotateCcw,
   RotateCw,
   Search,
+  ShieldCheck,
+  ShieldOff,
   Tag,
   Trash2,
   SearchX,
