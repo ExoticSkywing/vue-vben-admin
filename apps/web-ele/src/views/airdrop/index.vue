@@ -894,7 +894,8 @@ onUnmounted(() => {
   max-width: 240px; /* 默认收缩状态的宽度 */
   transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.search-input:focus-within {
+.search-input:focus-within,
+.search-input.is-focus {
   max-width: 560px; /* 聚焦时延展的宽度 */
 }
 .search-count {
@@ -952,10 +953,17 @@ onUnmounted(() => {
   .toolbar {
     flex-direction: column;
     gap: 10px;
+    align-items: stretch;
   }
   .toolbar-actions {
     width: 100%;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .global-settings-group {
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
   .search-bar {
     flex-direction: column;
@@ -963,11 +971,13 @@ onUnmounted(() => {
     gap: 8px;
     width: 100%;
   }
-  .search-input {
-    max-width: none;
+  .search-input,
+  .search-input.is-focus,
+  .search-input:focus-within {
+    max-width: 100%; /* 移动端占满全宽 */
   }
   .search-count {
-    text-align: right;
+    text-align: left;
   }
   .batch-bar {
     flex-direction: column;
