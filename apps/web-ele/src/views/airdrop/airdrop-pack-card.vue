@@ -97,12 +97,14 @@ function effectiveProtect(): boolean {
   return props.globalProtect;
 }
 
-function protectTooltip(): string {
+function protectLabel(): { text: string; type: 'inherited' | 'on' | 'off' } {
   const pc = props.pack.protect_content;
   if (pc === null || pc === undefined) {
-    return `继承全局（${props.globalProtect ? '受保护' : '不保护'}）\n点击切换`;
+    return { text: props.globalProtect ? '继承·保护' : '继承·公开', type: 'inherited' };
   }
-  return pc ? '强制保护\n点击切换' : '强制不保护\n点击切换';
+  return pc
+    ? { text: '强制保护', type: 'on' }
+    : { text: '强制公开', type: 'off' };
 }
 
 function formatDate(dateStr: string | null): string {
@@ -162,22 +164,18 @@ function formatDate(dateStr: string | null): string {
         </template>
       </div>
       <div class="pack-card-meta">
-        <ElTooltip :content="protectTooltip()" placement="top" :show-after="300">
-          <span
-            class="protect-indicator"
-            :class="{
-              'protect-indicator--on': effectiveProtect(),
-              'protect-indicator--off': !effectiveProtect(),
-              'protect-indicator--inherited': pack.protect_content === null || pack.protect_content === undefined,
-            }"
-            @click.stop="cycleProtect()"
-          >
-            <ElIcon :size="14">
-              <ShieldCheck v-if="effectiveProtect()" />
-              <ShieldOff v-else />
-            </ElIcon>
-          </span>
-        </ElTooltip>
+        <span
+          class="protect-badge"
+          :class="`protect-badge--${protectLabel().type}`"
+          @click.stop="cycleProtect()"
+        >
+          <ElIcon :size="12">
+            <ShieldCheck v-if="protectLabel().type === 'on'" />
+            <ShieldOff v-if="protectLabel().type === 'off'" />
+            <ShieldCheck v-if="protectLabel().type === 'inherited'" />
+          </ElIcon>
+          <span class="protect-badge-text">{{ protectLabel().text }}</span>
+        </span>
         <span class="meta-badge">{{ pack.item_count }} 项</span>
         <span class="meta-date">{{ formatDate(pack.created_at) }}</span>
         <template v-if="isTrash">
@@ -359,29 +357,43 @@ function formatDate(dateStr: string | null): string {
   gap: 8px;
   flex-shrink: 0;
 }
-/* 内容保护指示器 */
-.protect-indicator {
+/* 内容保护徽章 */
+.protect-badge {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
+  user-select: none;
+  white-space: nowrap;
+  border: 1px solid transparent;
 }
-.protect-indicator:hover {
-  background-color: var(--el-fill-color-light);
-  transform: scale(1.1);
+.protect-badge:hover {
+  transform: scale(1.05);
+  filter: brightness(0.95);
 }
-.protect-indicator--on {
-  color: var(--el-color-success);
+.protect-badge-text {
+  line-height: 1.4;
 }
-.protect-indicator--off {
-  color: var(--el-text-color-disabled);
+/* 继承全局 — 虚线边框 + 柔和蓝灰 */
+.protect-badge--inherited {
+  color: var(--el-text-color-secondary);
+  background-color: var(--el-fill-color);
+  border: 1px dashed var(--el-border-color);
 }
-.protect-indicator--inherited {
-  opacity: 0.6;
+/* 强制保护 — 绿色实底 */
+.protect-badge--on {
+  color: #fff;
+  background-color: var(--el-color-success);
+}
+/* 强制公开 — 橙色实底 */
+.protect-badge--off {
+  color: #fff;
+  background-color: var(--el-color-warning);
 }
 
 .meta-badge {
