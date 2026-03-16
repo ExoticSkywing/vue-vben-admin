@@ -3,6 +3,7 @@
  * 空投包管理 — 单个空投包卡片
  */
 import {
+  CheckCheck,
   Copy,
   KeyRound,
   Link,
@@ -30,6 +31,10 @@ import {
 } from 'element-plus';
 
 import type { AirdropApi } from '#/api/airdrop';
+import { nextTick, ref } from 'vue';
+
+const claimsInputRef = ref<InstanceType<typeof ElInputNumber> | null>(null);
+const autoDeleteInputRef = ref<InstanceType<typeof ElInputNumber> | null>(null);
 
 const props = defineProps<{
   pack: AirdropApi.Pack;
@@ -135,6 +140,9 @@ function cycleMaxClaims() {
   } else if (current === 0) {
     // 不限 -> 自定义（触发编辑）
     emit('startEditClaims', props.pack);
+    nextTick(() => {
+      claimsInputRef.value?.focus();
+    });
   } else {
     // 具体值 -> 继承
     emit('updateMaxClaims', props.pack.pack_id, null);
@@ -164,6 +172,9 @@ function cycleAutoDelete() {
   } else if (current === 0) {
     // 不删 -> 自定义（触发编辑）
     emit('startEditAutoDelete', props.pack);
+    nextTick(() => {
+      autoDeleteInputRef.value?.focus();
+    });
   } else {
     // 具体值 -> 继承
     emit('updateAutoDelete', props.pack.pack_id, null);
@@ -260,6 +271,7 @@ function formatDate(dateStr: string | null): string {
           <span class="claims-badge claims-badge--editing" @click.stop>
             <ElIcon :size="12"><UserRoundPen /></ElIcon>
             <ElInputNumber
+              ref="claimsInputRef"
               :model-value="editingClaimsValue"
               :min="1"
               :max="999"
@@ -267,11 +279,14 @@ function formatDate(dateStr: string | null): string {
               controls-position="right"
               class="badge-input"
               @update:model-value="(v) => emit('update:editingClaimsValue', v || 1)"
-              @blur="emit('saveClaimsEdit', pack)"
               @keyup.enter="emit('saveClaimsEdit', pack)"
               @keyup.esc="emit('cancelEditClaims')"
+              @click="() => claimsInputRef?.focus()"
             />
             <span class="setting-unit">次</span>
+            <ElButton size="small" text type="primary" @click.stop="emit('saveClaimsEdit', pack)">
+              <ElIcon :size="14"><CheckCheck /></ElIcon>
+            </ElButton>
           </span>
         </template>
         <template v-else>
@@ -288,6 +303,7 @@ function formatDate(dateStr: string | null): string {
           <span class="autodel-badge autodel-badge--editing" @click.stop>
             <ElIcon :size="12"><Timer /></ElIcon>
             <ElInputNumber
+              ref="autoDeleteInputRef"
               :model-value="editingAutoDeleteValue"
               :min="1"
               :max="86400"
@@ -296,11 +312,14 @@ function formatDate(dateStr: string | null): string {
               controls-position="right"
               class="badge-input"
               @update:model-value="(v) => emit('update:editingAutoDeleteValue', v || 60)"
-              @blur="emit('saveAutoDeleteEdit', pack)"
               @keyup.enter="emit('saveAutoDeleteEdit', pack)"
               @keyup.esc="emit('cancelEditAutoDelete')"
+              @click="() => autoDeleteInputRef?.focus()"
             />
             <span class="setting-unit">秒</span>
+            <ElButton size="small" text type="primary" @click.stop="emit('saveAutoDeleteEdit', pack)">
+              <ElIcon :size="14"><CheckCheck /></ElIcon>
+            </ElButton>
           </span>
         </template>
         <template v-else>
