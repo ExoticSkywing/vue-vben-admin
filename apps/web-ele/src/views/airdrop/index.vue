@@ -389,19 +389,21 @@ async function handleBatchPurge() {
   if (!ids.length) return;
   try {
     const { value: cleanChannel } = await ElMessageBox.confirm(
-      `<div style="font-size:14px;line-height:1.8">
-         <p style="margin:0 0 16px 0">确认<b>彻底删除</b>选中的 <b>${ids.length}</b> 个空投包？</p>
-         <p style="margin:0;color:#909399;font-size:13px">此操作不可恢复</p>
-       </div>
-       <label style="display:flex;align-items:center;gap:8px;margin-top:20px;padding:12px;background:#f5f7fa;border-radius:6px;cursor:pointer;user-select:none">
-         <input type="checkbox" id="purge-clean-channel" style="width:16px;height:16px;cursor:pointer" />
-         <span style="font-size:14px;color:#606266">同时清理 TG 频道中的文件消息</span>
-       </label>`,
+      `确认彻底删除选中的 ${ids.length} 个空投包？此操作不可恢复。
+       <div style="margin-top: 16px; padding: 12px; background-color: var(--el-color-danger-light-9); border-radius: 4px;">
+         <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color: var(--el-color-danger)">
+           <input type="checkbox" id="purge-clean-channel" style="accent-color: var(--el-color-danger);" />
+           <span>同时清理 TG 频道中的文件消息</span>
+         </label>
+         <div style="margin-top: 6px; font-size: 12px; color: var(--el-text-color-secondary); padding-left: 21px;">
+           仅支持删除 48 小时内创建的空投包
+         </div>
+       </div>`,
       '彻底删除',
       {
         confirmButtonText: '彻底删除',
         cancelButtonText: '取消',
-        type: 'error',
+        type: 'warning',
         dangerouslyUseHTMLString: true,
         confirmButtonClass: 'el-button--danger',
       },
