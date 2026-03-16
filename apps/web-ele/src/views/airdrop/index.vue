@@ -633,32 +633,9 @@ onUnmounted(() => {
             <span class="search-count">共 {{ total }} 个</span>
           </div>
 
-          <!-- 工具栏：视图切换 + 批量 + 全局设置 -->
+          <!-- 工具栏：全局设置（左） + 视图切换/批量（右） -->
           <div class="toolbar">
-            <div class="toolbar-actions">
-              <ElRadioGroup
-                :model-value="viewMode"
-                size="small"
-                @update:model-value="(v: string) => switchView(v as 'normal' | 'trash')"
-              >
-                <ElRadioButton value="normal">空投包</ElRadioButton>
-                <ElRadioButton value="trash">
-                  <ElIcon :size="13" style="margin-right: 3px; vertical-align: -1px"><Trash2 /></ElIcon>
-                  回收站
-                </ElRadioButton>
-              </ElRadioGroup>
-
-              <ElButton
-                size="small"
-                :type="batchMode ? 'primary' : 'default'"
-                plain
-                @click="toggleBatchMode"
-              >
-                <ElIcon :size="14" style="margin-right: 4px"><CheckCheck /></ElIcon>
-                {{ batchMode ? '退出批量' : '批量操作' }}
-              </ElButton>
-
-              <div class="global-settings-group">
+            <div class="global-settings-group">
                 <div class="global-setting-item">
                   <ElIcon :size="14" :class="globalProtect ? 'protect-on' : 'protect-off'">
                     <ShieldCheck v-if="globalProtect" />
@@ -701,7 +678,30 @@ onUnmounted(() => {
                   />
                   <span class="setting-unit">秒</span>
                 </div>
-              </div>
+            </div>
+
+            <div class="toolbar-actions">
+              <ElRadioGroup
+                :model-value="viewMode"
+                size="small"
+                @update:model-value="(v: string) => switchView(v as 'normal' | 'trash')"
+              >
+                <ElRadioButton value="normal">空投包</ElRadioButton>
+                <ElRadioButton value="trash">
+                  <ElIcon :size="13" style="margin-right: 3px; vertical-align: -1px"><Trash2 /></ElIcon>
+                  回收站
+                </ElRadioButton>
+              </ElRadioGroup>
+
+              <ElButton
+                size="small"
+                :type="batchMode ? 'primary' : 'default'"
+                plain
+                @click="toggleBatchMode"
+              >
+                <ElIcon :size="14" style="margin-right: 4px"><CheckCheck /></ElIcon>
+                {{ batchMode ? '退出批量' : '批量操作' }}
+              </ElButton>
             </div>
           </div>
 
@@ -846,7 +846,7 @@ onUnmounted(() => {
 .toolbar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
   flex-wrap: wrap;
@@ -855,8 +855,6 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1;
-  justify-content: flex-end;
 }
 .global-settings-group {
   display: flex;
@@ -960,6 +958,7 @@ onUnmounted(() => {
   .toolbar {
     flex-direction: column;
     gap: 10px;
+    align-items: stretch;
   }
   .toolbar-actions {
     width: 100%;
@@ -968,22 +967,25 @@ onUnmounted(() => {
   }
   .global-settings-group {
     width: 100%;
-    flex-direction: column;
-    gap: 6px;
+    gap: 4px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
   }
   .global-setting-item {
-    width: 100%;
-    padding: 4px 8px;
+    flex: 1;
+    min-width: 0;
+    padding: 4px 6px;
+    white-space: nowrap;
   }
   .setting-label {
-    font-size: 11px;
-    flex: 1;
+    font-size: 10px;
+    display: none;
   }
   .global-number-input {
-    width: 70px;
+    width: 50px;
   }
   .setting-unit {
-    font-size: 10px;
+    font-size: 9px;
   }
   .batch-bar {
     flex-direction: column;
