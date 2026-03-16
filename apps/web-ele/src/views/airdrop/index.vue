@@ -657,58 +657,47 @@ onUnmounted(() => {
               </ElButton>
 
               <div class="global-settings-group">
-                <ElTooltip
-                  :content="globalProtect ? '全局内容保护：已开启' : '全局内容保护：已关闭'"
-                  placement="bottom"
-                >
-                  <div class="global-setting-item">
-                    <ElIcon :size="14" :class="globalProtect ? 'protect-on' : 'protect-off'">
-                      <ShieldCheck v-if="globalProtect" />
-                      <ShieldOff v-else />
-                    </ElIcon>
+                <div class="global-setting-item">
+                  <span class="setting-label">内容保护</span>
+                  <ElTooltip
+                    :content="globalProtect ? '已开启' : '已关闭'"
+                    placement="bottom"
+                  >
                     <ElSwitch
                       :model-value="globalProtect"
                       :loading="settingsLoading"
                       size="small"
                       @update:model-value="(v: boolean) => toggleGlobalProtect(v)"
                     />
-                  </div>
-                </ElTooltip>
-                <ElTooltip
-                  :content="`全局领取限制：${globalMaxClaims === 0 ? '不限' : globalMaxClaims + ' 次/人'}`"
-                  placement="bottom"
-                >
-                  <div class="global-setting-item">
-                    <ElIcon :size="14" class="setting-icon"><Hash /></ElIcon>
-                    <ElInputNumber
-                      :model-value="globalMaxClaims"
-                      :min="0"
-                      :max="999"
-                      size="small"
-                      controls-position="right"
-                      class="global-number-input"
-                      @change="(v: number) => updateGlobalMaxClaims(v ?? 0)"
-                    />
-                  </div>
-                </ElTooltip>
-                <ElTooltip
-                  :content="`全局自动删除：${globalAutoDelete === 0 ? '关闭' : globalAutoDelete + ' 秒'}`"
-                  placement="bottom"
-                >
-                  <div class="global-setting-item">
-                    <ElIcon :size="14" class="setting-icon"><Timer /></ElIcon>
-                    <ElInputNumber
-                      :model-value="globalAutoDelete"
-                      :min="0"
-                      :max="86400"
-                      :step="10"
-                      size="small"
-                      controls-position="right"
-                      class="global-number-input"
-                      @change="(v: number) => updateGlobalAutoDelete(v ?? 0)"
-                    />
-                  </div>
-                </ElTooltip>
+                  </ElTooltip>
+                </div>
+                <div class="global-setting-item">
+                  <span class="setting-label">领取限制</span>
+                  <ElInputNumber
+                    :model-value="globalMaxClaims"
+                    :min="0"
+                    :max="999"
+                    size="small"
+                    controls-position="right"
+                    class="global-number-input"
+                    @change="(v: number) => updateGlobalMaxClaims(v ?? 0)"
+                  />
+                  <span class="setting-unit">次/人</span>
+                </div>
+                <div class="global-setting-item">
+                  <span class="setting-label">自动删除</span>
+                  <ElInputNumber
+                    :model-value="globalAutoDelete"
+                    :min="0"
+                    :max="86400"
+                    :step="10"
+                    size="small"
+                    controls-position="right"
+                    class="global-number-input"
+                    @change="(v: number) => updateGlobalAutoDelete(v ?? 0)"
+                  />
+                  <span class="setting-unit">秒</span>
+                </div>
               </div>
             </div>
           </div>
@@ -868,13 +857,24 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 4px;
+  padding: 6px 10px;
+  background-color: var(--el-fill-color-lighter);
+  border-radius: 6px;
+  border: 1px solid var(--el-border-color-lighter);
+}
+.setting-label {
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+  white-space: nowrap;
+  font-weight: 500;
+}
+.setting-unit {
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
 }
 .global-number-input {
-  width: 90px;
-}
-.setting-icon {
-  color: var(--el-text-color-secondary);
+  width: 75px;
 }
 .protect-on {
   color: var(--el-color-success);

@@ -188,42 +188,46 @@ function formatDate(dateStr: string | null): string {
   >
     <!-- 顶部：备注 + 操作 -->
     <div class="pack-card-header">
-      <ElCheckbox
-        v-if="batchMode"
-        :model-value="selected"
-        class="pack-checkbox"
-        @update:model-value="emit('toggleSelect', pack.pack_id)"
-        @click.stop
-      />
-      <div class="pack-card-title">
-        <ElIcon :size="18" class="pack-card-icon"><Package /></ElIcon>
-        <template v-if="editingNotePackId === pack.pack_id">
-          <ElInput
-            :model-value="editingNote"
-            size="small"
-            class="note-input"
-            placeholder="添加备注，方便下次搜索..."
-            @update:model-value="(v: string) => emit('update:editingNote', v)"
-            @keyup.enter="emit('saveNote', pack)"
-            @blur="emit('saveNote', pack)"
-          />
-          <ElButton size="small" link @click="emit('cancelEditNote')">
-            <ElIcon :size="14"><X /></ElIcon>
-          </ElButton>
-        </template>
-        <template v-else>
-          <span
-            v-if="pack.name"
-            class="pack-name"
-            v-html="highlightText(pack.name, searchText)"
-            @click="emit('startEditNote', pack)"
-          />
-          <span v-else class="pack-name-empty" @click="emit('startEditNote', pack)">
-            + 添加备注
-          </span>
-        </template>
+      <!-- 第一行：图标 + 备注 -->
+      <div class="pack-card-title-row">
+        <ElCheckbox
+          v-if="batchMode"
+          :model-value="selected"
+          class="pack-checkbox"
+          @update:model-value="emit('toggleSelect', pack.pack_id)"
+          @click.stop
+        />
+        <div class="pack-card-title">
+          <ElIcon :size="18" class="pack-card-icon"><Package /></ElIcon>
+          <template v-if="editingNotePackId === pack.pack_id">
+            <ElInput
+              :model-value="editingNote"
+              size="small"
+              class="note-input"
+              placeholder="添加备注，方便下次搜索..."
+              @update:model-value="(v: string) => emit('update:editingNote', v)"
+              @keyup.enter="emit('saveNote', pack)"
+              @blur="emit('saveNote', pack)"
+            />
+            <ElButton size="small" link @click="emit('cancelEditNote')">
+              <ElIcon :size="14"><X /></ElIcon>
+            </ElButton>
+          </template>
+          <template v-else>
+            <span
+              v-if="pack.name"
+              class="pack-name"
+              v-html="highlightText(pack.name, searchText)"
+              @click="emit('startEditNote', pack)"
+            />
+            <span v-else class="pack-name-empty" @click="emit('startEditNote', pack)">
+              + 添加备注
+            </span>
+          </template>
+        </div>
       </div>
-      <div class="pack-card-meta">
+      <!-- 第二行：徽章 + 元数据 + 操作 -->
+      <div class="pack-card-meta-row">
         <span
           class="protect-badge"
           :class="`protect-badge--${protectLabel().type}`"
@@ -374,13 +378,18 @@ function formatDate(dateStr: string | null): string {
   margin-right: 4px;
 }
 
-/* 卡片头部 */
+/* 卡片头部 - 垂直两行布局 */
 .pack-card-header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
+  flex-direction: column;
+  gap: 10px;
   margin-bottom: 10px;
+}
+.pack-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 .pack-card-title {
   display: flex;
@@ -388,6 +397,13 @@ function formatDate(dateStr: string | null): string {
   gap: 8px;
   min-width: 0;
   flex: 1;
+}
+.pack-card-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-left: 26px;
 }
 .pack-card-icon {
   color: var(--el-color-primary);
@@ -426,13 +442,6 @@ function formatDate(dateStr: string | null): string {
   border-radius: 3px;
 }
 
-/* 卡片元数据 */
-.pack-card-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
 /* 内容保护徽章 */
 .protect-badge {
   display: inline-flex;
