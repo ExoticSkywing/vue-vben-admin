@@ -68,6 +68,10 @@ const editingNotePackId = ref<string | null>(null);
 const editingNote = ref('');
 const editingTagsPackId = ref<string | null>(null);
 const editingTagsList = ref<string[]>([]);
+const editingClaimsPackId = ref<string | null>(null);
+const editingClaimsValue = ref<number>(1);
+const editingAutoDeletePackId = ref<string | null>(null);
+const editingAutoDeleteValue = ref<number>(60);
 
 // 分组管理 Drawer
 const drawerVisible = ref(false);
@@ -423,6 +427,37 @@ async function handleUpdateMaxClaims(packId: string, value: number | null) {
   }
 }
 
+// ─── 领取限制编辑 ───
+function startEditClaims(pack: AirdropApi.Pack) {
+  editingClaimsPackId.value = pack.pack_id;
+  editingClaimsValue.value = pack.max_claims_per_user && pack.max_claims_per_user > 0 
+    ? pack.max_claims_per_user 
+    : 1;
+}
+
+async function saveClaimsEdit(pack: AirdropApi.Pack) {
+  if (editingClaimsPackId.value !== pack.pack_id) return;
+  const value = editingClaimsValue.value;
+  if (value < 1 || value > 999) {
+    ElMessage.warning('请输入1-999之间的数值');
+    return;
+  }
+  
+  try {
+    await updatePackApi(pack.pack_id, { max_claims_per_user: String(value) });
+    pack.max_claims_per_user = value;
+    ElMessage.success(`已设为每人限制 ${value} 次`);
+  } catch (e: any) {
+    ElMessage.error(e?.message || '更新失败');
+  } finally {
+    editingClaimsPackId.value = null;
+  }
+}
+
+function cancelEditClaims() {
+  editingClaimsPackId.value = null;
+}
+
 // ─── 自动删除切换 ───
 async function handleUpdateAutoDelete(packId: string, value: number | null) {
   const pack = packs.value.find((p) => p.pack_id === packId);
@@ -438,6 +473,37 @@ async function handleUpdateAutoDelete(packId: string, value: number | null) {
   } catch (e: any) {
     ElMessage.error(e?.message || '设置失败');
   }
+}
+
+// ─── 自动删除编辑 ───
+function startEditAutoDelete(pack: AirdropApi.Pack) {
+  editingAutoDeletePackId.value = pack.pack_id;
+  editingAutoDeleteValue.value = pack.auto_delete_seconds && pack.auto_delete_seconds > 0 
+    ? pack.auto_delete_seconds 
+    : 60;
+}
+
+async function saveAutoDeleteEdit(pack: AirdropApi.Pack) {
+  if (editingAutoDeletePackId.value !== pack.pack_id) return;
+  const value = editingAutoDeleteValue.value;
+  if (value < 1 || value > 86400) {
+    ElMessage.warning('请输入1-86400之间的数值');
+    return;
+  }
+  
+  try {
+    await updatePackApi(pack.pack_id, { auto_delete_seconds: String(value) });
+    pack.auto_delete_seconds = value;
+    ElMessage.success(`已设为 ${value} 秒后自动删除`);
+  } catch (e: any) {
+    ElMessage.error(e?.message || '更新失败');
+  } finally {
+    editingAutoDeletePackId.value = null;
+  }
+}
+
+function cancelEditAutoDelete() {
+  editingAutoDeletePackId.value = null;
 }
 
 // ─── 删除（移入回收站） ───
@@ -772,6 +838,10 @@ onUnmounted(() => {
               :global-protect="globalProtect"
               :global-max-claims="globalMaxClaims"
               :global-auto-delete="globalAutoDelete"
+              :editing-claims-pack-id="editingClaimsPackId"
+              :editing-claims-value="editingClaimsValue"
+              :editing-auto-delete-pack-id="editingAutoDeletePackId"
+              :editing-auto-delete-value="editingAutoDeleteValue"
               @start-edit-note="startEditNote"
               @update:editing-note="editingNote = $event"
               @save-note="saveNote"
@@ -788,6 +858,14 @@ onUnmounted(() => {
               @update-protect="handleUpdateProtect"
               @update-max-claims="handleUpdateMaxClaims"
               @update-auto-delete="handleUpdateAutoDelete"
+              @start-edit-claims="startEditClaims"
+              @update:editing-claims-value="editingClaimsValue = $event"
+              @save-claims-edit="saveClaimsEdit"
+              @cancel-edit-claims="cancelEditClaims"
+              @start-edit-auto-delete="startEditAutoDelete"
+              @update:editing-auto-delete-value="editingAutoDeleteValue = $event"
+              @save-auto-delete-edit="saveAutoDeleteEdit"
+              @cancel-edit-auto-delete="cancelEditAutoDelete"
             />
           </div>
 

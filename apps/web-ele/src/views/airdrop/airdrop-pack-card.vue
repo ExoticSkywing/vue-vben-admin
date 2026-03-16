@@ -45,6 +45,10 @@ const props = defineProps<{
   globalProtect: boolean;
   globalMaxClaims: number;
   globalAutoDelete: number;
+  editingClaimsPackId: string | null;
+  editingClaimsValue: number;
+  editingAutoDeletePackId: string | null;
+  editingAutoDeleteValue: number;
 }>();
 
 const emit = defineEmits<{
@@ -64,6 +68,14 @@ const emit = defineEmits<{
   updateProtect: [packId: string, value: boolean | null];
   updateMaxClaims: [packId: string, value: number | null];
   updateAutoDelete: [packId: string, value: number | null];
+  startEditClaims: [pack: AirdropApi.Pack];
+  'update:editingClaimsValue': [value: number];
+  saveClaimsEdit: [pack: AirdropApi.Pack];
+  cancelEditClaims: [];
+  startEditAutoDelete: [pack: AirdropApi.Pack];
+  'update:editingAutoDeleteValue': [value: number];
+  saveAutoDeleteEdit: [pack: AirdropApi.Pack];
+  cancelEditAutoDelete: [];
 }>();
 
 function parseTags(tags: string | null): string[] {
@@ -113,18 +125,20 @@ function protectLabel(): { text: string; type: 'inherited' | 'on' | 'off' } {
     : { text: '强制公开', type: 'off' };
 }
 
-// 领取限制三态循环：null(继承) -> 1(限1次) -> 0(不限) -> null
+// 领取限制循环：继承 -> 不限 -> 自定义 -> 继承（有具体值时）
 function cycleMaxClaims() {
   const current = props.pack.max_claims_per_user;
-  let next: number | null;
+  
   if (current === null || current === undefined) {
-    next = 1;
-  } else if (current > 0) {
-    next = 0;
+    // 继承 -> 不限
+    emit('updateMaxClaims', props.pack.pack_id, 0);
+  } else if (current === 0) {
+    // 不限 -> 自定义（触发编辑）
+    emit('startEditClaims', props.pack);
   } else {
-    next = null;
+    // 具体值 -> 继承
+    emit('updateMaxClaims', props.pack.pack_id, null);
   }
-  emit('updateMaxClaims', props.pack.pack_id, next);
 }
 
 function claimsLabel(): { text: string; type: 'inherited' | 'limited' | 'unlimited' } {
@@ -140,18 +154,20 @@ function claimsLabel(): { text: string; type: 'inherited' | 'limited' | 'unlimit
     : { text: `限${v}次`, type: 'limited' };
 }
 
-// 自动删除三态循环：null(继承) -> 60(60秒) -> 0(不删) -> null
+// 自动删除循环：继承 -> 不删 -> 自定义 -> 继承（有具体值时）
 function cycleAutoDelete() {
   const current = props.pack.auto_delete_seconds;
-  let next: number | null;
+  
   if (current === null || current === undefined) {
-    next = 60;
-  } else if (current > 0) {
-    next = 0;
+    // 继承 -> 不删
+    emit('updateAutoDelete', props.pack.pack_id, 0);
+  } else if (current === 0) {
+    // 不删 -> 自定义（触发编辑）
+    emit('startEditAutoDelete', props.pack);
   } else {
-    next = null;
+    // 具体值 -> 继承
+    emit('updateAutoDelete', props.pack.pack_id, null);
   }
-  emit('updateAutoDelete', props.pack.pack_id, next);
 }
 
 function autoDeleteLabel(): { text: string; type: 'inherited' | 'active' | 'disabled' } {
@@ -240,22 +256,63 @@ function formatDate(dateStr: string | null): string {
           </ElIcon>
           <span class="protect-badge-text">{{ protectLabel().text }}</span>
         </span>
-        <span
-          class="claims-badge"
-          :class="`claims-badge--${claimsLabel().type}`"
-          @click.stop="cycleMaxClaims()"
-        >
-          <ElIcon :size="12"><UserRoundPen /></ElIcon>
-          <span class="claims-badge-text">{{ claimsLabel().text }}</span>
-        </span>
-        <span
-          class="autodel-badge"
-          :class="`autodel-badge--${autoDeleteLabel().type}`"
-          @click.stop="cycleAutoDelete()"
-        >
-          <ElIcon :size="12"><Timer /></ElIcon>
-          <span class="autodel-badge-text">{{ autoDeleteLabel().text }}</span>
-        </span>
+        <template v-if="editingClaimsPackId === pack.pack_id">
+          <span class="claims-badge claims-badge--editing" @click.stop>
+            <ElIcon :size="12"><UserRoundPen /></ElIcon>
+            <ElInputNumber
+              :model-value="editingClaimsValue"
+              :min="1"
+              :max="999"
+              size="small"
+              controls-position="right"
+              class="badge-input"
+              @update:model-value="(v) => emit('update:editingClaimsValue', v || 1)"
+              @blur="emit('saveClaimsEdit', pack)"
+              @keyup.enter="emit('saveClaimsEdit', pack)"
+              @keyup.esc="emit('cancelEditClaims')"
+            />
+            <span class="setting-unit">次</span>
+          </span>
+        </template>
+        <template v-else>
+          <span
+            class="claims-badge"
+            :class="`claims-badge--${claimsLabel().type}`"
+            @click.stop="cycleMaxClaims()"
+          >
+            <ElIcon :size="12"><UserRoundPen /></ElIcon>
+            <span class="claims-badge-text">{{ claimsLabel().text }}</span>
+          </span>
+        </template>
+        <template v-if="editingAutoDeletePackId === pack.pack_id">
+          <span class="autodel-badge autodel-badge--editing" @click.stop>
+            <ElIcon :size="12"><Timer /></ElIcon>
+            <ElInputNumber
+              :model-value="editingAutoDeleteValue"
+              :min="1"
+              :max="86400"
+              :step="10"
+              size="small"
+              controls-position="right"
+              class="badge-input"
+              @update:model-value="(v) => emit('update:editingAutoDeleteValue', v || 60)"
+              @blur="emit('saveAutoDeleteEdit', pack)"
+              @keyup.enter="emit('saveAutoDeleteEdit', pack)"
+              @keyup.esc="emit('cancelEditAutoDelete')"
+            />
+            <span class="setting-unit">秒</span>
+          </span>
+        </template>
+        <template v-else>
+          <span
+            class="autodel-badge"
+            :class="`autodel-badge--${autoDeleteLabel().type}`"
+            @click.stop="cycleAutoDelete()"
+          >
+            <ElIcon :size="12"><Timer /></ElIcon>
+            <span class="autodel-badge-text">{{ autoDeleteLabel().text }}</span>
+          </span>
+        </template>
         <span class="meta-badge">{{ pack.item_count }} 项</span>
       </div>
     </div>
@@ -562,6 +619,32 @@ function formatDate(dateStr: string | null): string {
 .autodel-badge--disabled {
   color: #fff;
   background-color: #6b7280;
+}
+
+/* 徽章编辑状态 */
+.claims-badge--editing,
+.autodel-badge--editing {
+  padding: 2px 8px;
+  background-color: var(--el-fill-color-light);
+  border: 1px solid var(--el-color-primary);
+  cursor: default;
+}
+.claims-badge--editing:hover,
+.autodel-badge--editing:hover {
+  transform: none;
+  filter: none;
+}
+.badge-input {
+  width: 65px;
+}
+.badge-input :deep(.el-input__inner) {
+  text-align: center;
+  padding: 0 8px;
+}
+.setting-unit {
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+  margin-left: 2px;
 }
 
 .meta-badge {
